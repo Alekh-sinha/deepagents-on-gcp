@@ -1,0 +1,146 @@
+[
+  {
+    "name": "create_session",
+    "api_mode": ""
+  },
+  {
+    "name": "list_sessions",
+    "api_mode": ""
+  },
+  {
+    "name": "get_session",
+    "api_mode": ""
+  },
+  {
+    "name": "update_session",
+    "api_mode": ""
+  },
+  {
+    "name": "get_transcript",
+    "api_mode": ""
+  },
+  {
+    "name": "warm_sandbox",
+    "api_mode": ""
+  },
+  {
+    "name": "send_message",
+    "api_mode": ""
+  },
+  {
+    "name": "get_turn",
+    "api_mode": ""
+  },
+  {
+    "name": "get_events",
+    "api_mode": ""
+  },
+  {
+    "name": "cancel_turn",
+    "api_mode": ""
+  },
+  {
+    "name": "resume_turn",
+    "api_mode": ""
+  },
+  {
+    "name": "list_approvals",
+    "api_mode": ""
+  },
+  {
+    "name": "decide",
+    "api_mode": ""
+  },
+  {
+    "name": "list_models",
+    "api_mode": ""
+  },
+  {
+    "name": "get_config",
+    "api_mode": ""
+  },
+  {
+    "name": "get_audit",
+    "api_mode": ""
+  },
+  {
+    "name": "expire",
+    "api_mode": ""
+  },
+  {
+    "name": "list_artifacts",
+    "api_mode": ""
+  },
+  {
+    "name": "get_artifact",
+    "api_mode": ""
+  },
+  {
+    "name": "read_artifact",
+    "api_mode": ""
+  },
+  {
+    "name": "get_artifact_url",
+    "api_mode": ""
+  },
+  {
+    "name": "list_mcp_servers",
+    "api_mode": ""
+  },
+  {
+    "name": "put_mcp_server",
+    "api_mode": ""
+  },
+  {
+    "name": "import_mcp_config",
+    "api_mode": ""
+  },
+  {
+    "name": "update_mcp_server",
+    "api_mode": ""
+  },
+  {
+    "name": "test_mcp_server",
+    "api_mode": ""
+  },
+  {
+    "name": "delete_mcp_server",
+    "api_mode": ""
+  },
+  {
+    "name": "list_schedules",
+    "api_mode": ""
+  },
+  {
+    "name": "create_schedule",
+    "api_mode": ""
+  },
+  {
+    "name": "update_schedule",
+    "api_mode": ""
+  },
+  {
+    "name": "delete_schedule",
+    "api_mode": ""
+  },
+  {
+    "name": "run_schedule_now",
+    "api_mode": ""
+  },
+  {
+    "name": "list_schedule_runs",
+    "api_mode": ""
+  },
+  {
+    "name": "run",
+    "api_mode": ""
+  },
+  {
+    "name": "get_run",
+    "api_mode": ""
+  },
+  {
+    "name": "stream_turn",
+    "api_mode": "stream"
+  }
+]

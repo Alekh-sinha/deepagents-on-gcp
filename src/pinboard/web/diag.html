@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pinboard diagnostics</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #1b1b1f; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { color: #e6e6ea; background: #17171b; } pre { background: #232329; } }
+  pre { background: #f3f3f6; padding: .75rem; border-radius: 6px; overflow: auto; max-height: 24rem; font-size: 13px; }
+  button { font: inherit; padding: .5rem 1rem; }
+  .ok { color: #1a7f37; } .bad { color: #cf222e; }
+</style>
+<h1>Pinboard diagnostics</h1>
+<p>A throw-away page to check sign-in and live streaming from a real browser. The real app replaces it.</p>
+<p id="who">checking sign-in...</p>
+<p><button id="go" disabled>Send a test message and watch it stream</button></p>
+<pre id="log"></pre>
+<script>
+const H = { "X-Requested-With": "pinboard", "Content-Type": "application/json" };
+const log = (t) => { const el = document.getElementById("log"); el.textContent += t + "\n"; el.scrollTop = el.scrollHeight; };
+const api = async (path, opts = {}) => { const r = await fetch(path, { headers: H, ...opts }); const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(r.status + " " + (b.detail || "")); return b; };
+(async () => {
+  try { const me = await api("/api/me"); document.getElementById("who").innerHTML = 'Signed in as <b class="ok">' + me.user + '</b> (default model ' + me.default_model + ')'; document.getElementById("go").disabled = false; }
+  catch (e) { document.getElementById("who").innerHTML = '<span class="bad">not signed in or not allowed: ' + e.message + '</span>'; }
+})();
+document.getElementById("go").onclick = async () => {
+  document.getElementById("go").disabled = true; document.getElementById("log").textContent = "";
+  const t0 = performance.now(), ms = () => String(Math.round(performance.now() - t0)).padStart(6) + " ms  ";
+  try {
+    const s = await api("/api/sessions", { method: "POST", body: JSON.stringify({ title: "diagnostics" }) });
+    const turn = await api("/api/sessions/" + s.id + "/messages", { method: "POST", body: JSON.stringify({ text: "Write about 250 words on why an agent's state must survive a restart." }) });
+    log(ms() + "turn started: " + turn.id);
+    let tokens = 0, first = null, last = null;
+    const es = new EventSource("/api/turns/" + turn.id + "/stream");
+    es.onmessage = (m) => { const e = JSON.parse(m.data);
+      if (e.type === "token") { tokens++; first = first ?? performance.now() - t0; last = performance.now() - t0; if (tokens % 5 === 1) log(ms() + "token batch " + tokens); }
+      else log(ms() + e.type); };
+    es.addEventListener("end", () => { es.close(); log(ms() + "stream ended");
+      log("\nSUMMARY: " + tokens + " token batches, first at " + Math.round(first) + " ms, last at " + Math.round(last) + " ms => " + (tokens >= 3 && last - first > 1000 ? "arrived incrementally (OK)" : "NOT incremental (buffered?)"));
+      document.getElementById("go").disabled = false; });
+    es.addEventListener("error", (m) => { if (m.data) log(ms() + "error event: " + m.data); });
+  } catch (e) { log("FAILED: " + e.message); document.getElementById("go").disabled = false; }
+};
+</script>

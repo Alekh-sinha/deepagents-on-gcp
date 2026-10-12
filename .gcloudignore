@@ -1,0 +1,11 @@
+.git
+.venv
+terraform/.terraform
+__pycache__
+.pytest_cache
+outputs
+artifacts
+.env
+.env.*
+!example.env
+*.pem

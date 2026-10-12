@@ -1,0 +1,23 @@
+# secrets and local state never go into the image
+.env
+.env.*
+!example.env
+*.pem
+*.key
+service-account*.json
+# not needed at run time
+.venv
+.git
+.pytest_cache
+__pycache__
+*.pyc
+outputs
+artifacts
+tests
+spikes
+scripts
+docs
+*.md
+!README.md
+terraform
+**/.terraform

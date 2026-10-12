@@ -1,0 +1,4 @@
+# This deployment's own values (git-ignored). Same keys as config.yaml.
+name: pinboard                # the resources already deployed are called pinboard-*
+project: automation-ai-507911
+artifacts_bucket: privai      # existing bucket

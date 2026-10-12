@@ -1,0 +1,73 @@
+# Pinboard policy: hard limits enforced INSIDE the tools, before any approval is requested.
+# Edit and restart (or redeploy) to change. A missing or invalid file stops the app: it fails closed.
+
+# Google accounts allowed to use the app (checked by the frontend server and by the engine).
+allowed_users:
+  - alekh.sinha09@gmail.com
+
+email:
+  from_inbox: privai-agent-0909@agentmail.to
+  allowed_recipients:            # ONLY these addresses can ever be emailed (to, cc and bcc)
+    - alekh.sinha09@gmail.com
+  max_per_day: 20
+  max_attachment_mb: 5
+
+github:
+  allowed_repos: []              # owner/name; [] = every repo the GitHub App installation can see
+  branch_prefix: "agent/"        # the agent may only create/push branches with this prefix
+  never_default_branch: true
+
+models:
+  default: gemini-2.5-flash
+  # on  = the orchestrator may choose the model of each helper it starts (the `delegate` tool), never above the model the user selected.
+  # off = no `delegate` tool and no model choice: helpers use the user's model, through the library's own `task` tool.
+  helper_model_choice: on
+  # rank: 1 = cheapest; a higher rank is stronger and costs more. A user who selects rank N lets helpers use ranks 1..N (ties count as equal).
+  # location: where Vertex serves the model (the 3.x models exist only in "global"; the 2.5 models work in both). use_for: what the orchestrator reads.
+  # The ranks below are PROVISIONAL (ordered by tier and release, not by measured price): correct them from the pricing page, and run
+  # scripts/qualify_models.py before trusting a model with real work.
+  allowed:                       # what the model-list API returns and what callers may select
+    - {id: gemini-2.5-flash-lite, provider: google_genai, rank: 1,  location: us-central1, label: "Gemini 2.5 Flash-Lite", use_for: "simple lookups, formatting, short summaries, trivial edits"}
+    - {id: gemini-3.1-flash-lite, provider: google_genai, rank: 2,  location: global,      label: "Gemini 3.1 Flash-Lite", use_for: "quick research and extraction, simple code snippets"}
+    - {id: gemini-3.5-flash-lite, provider: google_genai, rank: 3,  location: global,      label: "Gemini 3.5 Flash-Lite", use_for: "routine research, summarising documents, light data cleanup"}
+    - {id: gemini-2.5-flash,      provider: google_genai, rank: 4,  location: us-central1, label: "Gemini 2.5 Flash",      use_for: "everyday research, single-file code, structured extraction"}
+    - {id: gemini-3.5-flash,      provider: google_genai, rank: 5,  location: global,      label: "Gemini 3.5 Flash",      use_for: "harder research and analysis, multi-step reasoning"}
+    - {id: gemini-3.6-flash,      provider: google_genai, rank: 6,  location: global,      label: "Gemini 3.6 Flash",      use_for: "careful analysis, multi-file code, longer plans"}
+    - {id: gemini-3.7-flash,      provider: google_genai, rank: 7,  location: global,      label: "Gemini 3.7 Flash",      use_for: "demanding analysis and coding, precise numeric work"}
+    - {id: gemini-3.8-flash,      provider: google_genai, rank: 8,  location: global,      label: "Gemini 3.8 Flash",      use_for: "the most capable flash model: hard reasoning and large changes"}
+    - {id: gemini-2.5-pro,        provider: google_genai, rank: 9,  location: us-central1, label: "Gemini 2.5 Pro",        use_for: "the hardest reasoning, long documents, large code changes"}
+    - {id: gemini-3.1-pro-preview, provider: google_genai, rank: 10, location: global,     label: "Gemini 3.1 Pro (preview)", use_for: "top-tier reasoning and planning (preview model: may change)"}
+
+approvals:
+  # Tools a person must ALWAYS approve, even in a session switched to "approve all" (tool names as the agent calls them). Example: [github_open_pr].
+  # Besides this list, "approve all" only covers shell commands and GitHub changes; e-mail, plans and tools the engine does not recognise
+  # (kind "other", e.g. a new agent's own tools) are automatic only if the user lists that kind explicitly, and questions never are.
+  never_auto_tools: []
+
+mcp:                             # bring-your-own MCP servers: a user pastes a standard `mcpServers` JSON for a server that is already deployed (HTTP)
+  enabled: true
+  allowed_hosts: []              # [] = any public host; list host names to restrict (recommended once you know which servers you use)
+  allow_private_hosts: false     # true only for local development: lets a server live on localhost or a private network
+  max_servers_per_user: 10
+  max_tools_per_server: 40
+  tool_timeout_seconds: 60       # one tool call
+  max_result_chars: 20000        # longer results are cut (the agent is told)
+
+schedules:                       # saved instructions that run on a cron schedule with nobody watching (approvals wait for the user)
+  enabled: true
+  max_per_user: 20
+  min_interval_minutes: 15       # no schedule may fire more often than this
+  max_runs_per_day: 24           # per user, across all schedules
+
+warm_sandbox:                    # a sandbox takes 30-130 s to create; keep ONE spare ready so the first file/shell use is instant
+  mode: on_activity              # off | on_activity (made when the user starts typing, replaced after use) | always (also kept topped up)
+  spare_max_minutes: 15          # an unused spare is deleted after this long
+  max_spares_per_day: 10         # hard cap on spares created per 24 h (bounds the extra cost)
+
+limits:
+  max_turn_minutes: 30
+  max_concurrent_turns: 4
+  max_auto_resumes: 1
+  sandbox_idle_minutes: 20       # delete a session's sandbox after this long idle (files are kept as artifacts)
+  max_helper_model_calls: 40       # one helper task may call the model this many times at most (then it stops and reports)
+  max_auto_approvals_per_turn: 25  # a session set to auto-approve still stops for a person after this many approvals in one turn

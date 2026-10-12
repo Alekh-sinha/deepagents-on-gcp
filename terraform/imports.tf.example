@@ -1,0 +1,48 @@
+# The resources below were already created by deploy/deploy.sh. To let Terraform adopt them instead of failing with "already exists":
+#   cp imports.tf.example imports.tf   (then: terraform plan; it should show few or no creations for these)
+# Delete imports.tf after the first successful apply. Not needed in an empty project.
+# Cloud SQL's user password and the two generated secret VERSIONS are replaced with Terraform's own values (a new secret version, a new DB password).
+
+import {
+  to = google_artifact_registry_repository.repo
+  id = "projects/automation-ai-507911/locations/us-central1/repositories/pinboard-repo"
+}
+import {
+  to = google_service_account.runtime
+  id = "projects/automation-ai-507911/serviceAccounts/pinboard-runtime@automation-ai-507911.iam.gserviceaccount.com"
+}
+import {
+  to = google_service_account.scheduler
+  id = "projects/automation-ai-507911/serviceAccounts/pinboard-scheduler@automation-ai-507911.iam.gserviceaccount.com"
+}
+import {
+  to = google_sql_database_instance.pg
+  id = "projects/automation-ai-507911/instances/pinboard-pg"
+}
+import {
+  to = google_sql_database.main
+  id = "projects/automation-ai-507911/instances/pinboard-pg/databases/pinboard"
+}
+import {
+  to = google_sql_user.main
+  id = "automation-ai-507911/pinboard-pg/pinboard"
+}
+import {
+  to = google_cloud_scheduler_job.housekeeping
+  id = "projects/automation-ai-507911/locations/us-central1/jobs/pinboard-housekeeping"
+}
+import {
+  for_each = toset(["pinboard-database-url", "pinboard-api-token"])
+  to       = google_secret_manager_secret.generated[each.key]
+  id       = "projects/automation-ai-507911/secrets/${each.key}"
+}
+import {
+  for_each = toset(["TAVILY_API_KEY", "AGENTMAIL_API_KEY", "GITHUB_APP_PRIVATE_KEY"])
+  to       = google_secret_manager_secret.provided[each.key]
+  id       = "projects/automation-ai-507911/secrets/${each.key}"
+}
+# The existing runtime: its id is in deploy/.state.json. Importing it makes Terraform manage it; a mismatch in settings shows as an update in the plan.
+# import {
+#   to = google_vertex_ai_reasoning_engine.engine
+#   id = "projects/99252288520/locations/us-central1/reasoningEngines/6680122751849594880"
+# }

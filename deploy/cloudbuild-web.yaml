@@ -1,0 +1,5 @@
+# gcloud builds submit . --config deploy/cloudbuild-web.yaml --substitutions _IMAGE=REGION-docker.pkg.dev/PROJECT/REPO/NAME-web:latest
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "deploy/web.Dockerfile", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]

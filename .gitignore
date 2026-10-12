@@ -1,0 +1,17 @@
+# secrets: never commit these
+.env
+.env.*
+!example.env
+*.pem
+*.key
+service-account*.json
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+dist/
+*.egg-info/
+scripts/qualify_models_results.json
+.local-ui/

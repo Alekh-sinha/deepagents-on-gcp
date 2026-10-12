@@ -1,0 +1,4 @@
+{
+  "runtime": "projects/99252288520/locations/us-central1/reasoningEngines/6680122751849594880",
+  "image": "us-central1-docker.pkg.dev/automation-ai-507911/pinboard-repo/pinboard:latest"
+}

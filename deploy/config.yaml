@@ -1,0 +1,32 @@
+# Everything that makes a deployment YOURS. deploy.sh, deploy/runtime.py and terraform/ all read this file.
+# Change `name` and every cloud resource follows it: <name>-repo, <name>-runtime, <name>-pg, <name>-housekeeping, <name>-api-token ...
+# To keep personal values out of git, put overrides in deploy/config.local.yaml (same keys; it is git-ignored).
+# Environment variables win over both files: PB_NAME, PB_PROJECT, PB_REGION, PB_BUCKET, PB_SQL_TIER, PB_SCHEDULE
+# (PB_LOCAL_CONFIG=/path/file.yaml uses a different local file, e.g. for a second deployment).
+# Keep this file FLAT (no nested maps): Terraform merges the two files key by key.
+
+name: agent                   # 2-20 characters: lower-case letters, digits, '-'; starts with a letter
+project: ""                   # GCP project id; empty = the one `gcloud config get-value project` reports
+region: us-central1
+
+artifacts_bucket: ""          # bucket for files the agent saves (under <bucket>/<name>/); empty = <project>-<name>-files, created by `setup`
+sql_tier: db-f1-micro         # Cloud SQL machine type (BILLED while the instance exists)
+sql_database: ""              # empty = <name>
+sql_user: ""                  # empty = <name>
+schedule: "*/5 * * * *"       # how often the housekeeping job runs (expires approvals, finds lost workers, sweeps sandboxes)
+min_instances: 1              # engine instances kept warm
+max_instances: 2
+
+# Secrets. `deploy.sh setup` finds them by NAME: every variable in .env whose name contains KEY, TOKEN, SECRET, PASSWORD, PRIVATE or CREDENTIAL is copied
+# into Secret Manager (when missing), and every other variable becomes a plain environment variable of the engine (see deploy/dotenv_secrets.py).
+# You do not have to list them. The lists below only ADD to that:
+#   secrets_from_dotenv  names that must be copied from .env even if the name does not look secret
+#   secrets_provided     secrets NOT in .env (e.g. a key file): `setup` only tells you which are missing
+#   env_exclude          .env variables that must never reach the cloud (on top of the built-in list of local-only and deployment-managed names)
+# Terraform cannot read .env, so it creates empty Secret Manager entries for the names in the first two lists.
+web_min_instances: 0          # the web backend (Cloud Run behind IAP); 0 = scales to zero, the first request after a pause is slower
+web_max_instances: 3
+
+secrets_from_dotenv: [TAVILY_API_KEY, AGENTMAIL_API_KEY]
+secrets_provided: [GITHUB_APP_PRIVATE_KEY]
+env_exclude: []

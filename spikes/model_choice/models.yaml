@@ -1,0 +1,10 @@
+# The model pool for the helper-model prototype. Ranks decide what a helper may use: never above the model the user selected.
+# Edit freely. `location` matters: gemini-3.5-flash is only served from the `global` location in this project; the 2.5 models work in both.
+default: gemini-2.5-flash
+enforce_ceiling: true          # false = a helper may use any model in the pool (the experiment's "ceiling off" run)
+
+models:
+  - {id: gemini-2.5-flash-lite, provider: google_genai, location: us-central1, rank: 1, label: "Gemini 2.5 Flash-Lite", use_for: "simple lookups, formatting, short summaries, renaming, trivial edits"}
+  - {id: gemini-2.5-flash,      provider: google_genai, location: us-central1, rank: 2, label: "Gemini 2.5 Flash",      use_for: "everyday research, single-file code, structured extraction"}
+  - {id: gemini-3.5-flash,      provider: google_genai, location: global,      rank: 3, label: "Gemini 3.5 Flash",      use_for: "harder research and analysis, multi-step reasoning, careful numeric work"}
+  - {id: gemini-2.5-pro,        provider: google_genai, location: us-central1, rank: 4, label: "Gemini 2.5 Pro",        use_for: "the hardest reasoning, large multi-file code changes, long documents"}
