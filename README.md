@@ -1,12 +1,12 @@
-# Pinboard: deploying a LangGraph agent on Google Cloud, as close to production as one person can get it
+# Pinboard: a LangGraph agent on Google Cloud
 
-Pinboard is a personal AI assistant: it researches, writes files, sends e-mail and pushes code to GitHub, and **every side effect waits for a human decision**. It is built on deepagents / LangGraph with Gemini on Vertex AI.
-It is also a worked example for anyone who wants to run a **LangGraph agent on Google Cloud** and wants more than a demo: a managed runtime, a real front door, durable state, private networking, controlled egress,
-human approval, infrastructure as code, and tests. Everything here was built and run on a real project, and where something is documented but **not** tested by us, the page says so.
+Pinboard is a personal AI assistant. It researches, writes files, sends e-mail and pushes code to GitHub, and **every side effect waits for a human decision**. It is built on deepagents / LangGraph with Gemini on Vertex AI.
+This repository also records how it is deployed on Google Cloud, and why: the managed runtime, the web front door, state in Postgres, private networking and egress control, human approval, the deployment scripts and Terraform, and the tests.
+Where a statement rests on Google's documentation and was not tested here, the page says so.
 
-This page tells the story in four steps. **[The Google Cloud way](#the-google-cloud-way)**: what the platform offers an agent. **[Problems we ran into](#problems-we-ran-into)**: where that path hurt, including a full write-up of why Agent Gateway did not work for us.
+The page follows the order of the work. **[The Google Cloud way](#the-google-cloud-way)**: what the platform offers an agent. **[Problems we ran into](#problems-we-ran-into)**: where that path hurt, including a full write-up of why Agent Gateway did not work for us.
 **[The design we ended up with](#the-design-we-ended-up-with)**: what runs today. **[Why it is built this way](#why-it-is-built-this-way)**: each part explained (Cloud Run, state, egress, identity, sandbox, guardrails, deployment).
-Then **[how close to production it is](#how-close-to-production-it-is)** (honestly), [how to run it](#how-to-run-it) and [how to put your own agent in it](#how-to-add-your-own-agent).
+Then **[what is in place, and what is not](#what-is-in-place-and-what-is-not)**, [how to run it](#how-to-run-it) and [how to put your own agent in it](#how-to-add-your-own-agent).
 
 Original plan: **[PLAN.md](PLAN.md)** · how to work on the repo (commands, rules, platform facts): **[CLAUDE.md](CLAUDE.md)** · network egress in depth: **[docs/EGRESS.md](docs/EGRESS.md)**.
 
@@ -217,7 +217,7 @@ The goal: the engine can reach **only the third-party hosts you list**, while ke
 * **Every HTTP client has to cooperate:** a proxy is explicit (clients must be told to use it). The proxy settings reach every client through environment variables, and a test runs each real client against a fake proxy to prove it. That test found that Tavily's async client ignores proxies and that `httpx` cannot match address ranges in `NO_PROXY`.
 * **The same list drives the app and the network:** `mcp.allowed_hosts` in the policy is also the proxy's allowlist, so a host the app accepts is a host the network lets through. A user cannot connect a new third party from the UI alone.
 * **Verified.** On a throwaway agent with this exact network layout: allowed hosts answered in about 0.1 s through the proxy, the same hosts timed out when tried directly, and hosts not on the list were refused by the proxy. On the live engine: it runs on the private database, a real web search went through the proxy, and a real Gemini turn called tools on an MCP server inside the VPC by name (non-listed and non-VPC servers were refused when added). We did not probe for blocked hosts from inside the live engine, because the product has no way to make arbitrary requests.
-* **What it does not do:** data can still leave to an allowed host or through a Google API your IAM allows; inbound calls are IAM only (VPC Service Controls would help and is not set up). Full detail, the commands, and the honest list: **[docs/EGRESS.md](docs/EGRESS.md)**.
+* **What it does not do:** data can still leave to an allowed host or through a Google API your IAM allows; inbound calls are IAM only (VPC Service Controls would help and is not set up). Full detail, the commands and the limits: **[docs/EGRESS.md](docs/EGRESS.md)**.
 * It is **off by default** and switched on by three lines of config (`network_attachment`, `egress_proxy`, `sql_private_ip`); `deploy/network.sh up` builds the pieces, Terraform has the same settings.
 
 ### Identity, secrets and least privilege
@@ -333,7 +333,7 @@ What bills while it is deployed:
 | Cloud Run web backend | only while handling requests | scales to zero |
 | Cloud Build, Cloud Scheduler, Secret Manager | pennies | |
 
-## How close to production it is
+## What is in place, and what is not
 
 | In place | Evidence |
 |---|---|
@@ -348,7 +348,7 @@ What bills while it is deployed:
 | Cost controls | Lazy and capped sandboxes, scale-to-zero web tier, idle sweeps, `max_concurrent_turns`, per-turn caps on helper model calls and automatic approvals |
 | A large automated test suite, and a test that pins the default behaviour | Over 1,200 backend tests (a real Postgres variant included) and 149 frontend tests; `tests/engine/test_default_path_golden.py`; important tests are checked by breaking the code and watching them fail |
 
-**Not in place, or not verified (so you know what to add):**
+**Not in place, or not verified:**
 
 * **Inbound is IAM only.** Callers reach the engine through the Vertex AI API; nothing restricts them to your network. VPC Service Controls would, and we have not set it up. A gateway ingress is incompatible with the PSC interface.
 * **Google APIs are open to whatever IAM allows**, and data can leave to a host on the allowlist. The network control reduces the attack surface; it is not a data-loss guarantee.

@@ -141,7 +141,7 @@ A one-off run's sandbox is deleted when the run finishes; a conversation's sandb
 ## What has and hasn't been tested
 Tested with scripted models and fakes (`uv run pytest`): guards, vault, skills, the sandbox class, the whole agent loop, both state stores on real Postgres, park/approve/reject/edit/expire including a simulated restart, the HTTP API, and a real `pinboard serve` process.
 Tested against the real services: `scripts/verify_real.py` runs the agent with real Gemini and the real sandbox service (streaming, approvals, restart while waiting, cancel, artifacts, e-mail, GitHub, parallel helpers, MCP); `scripts/smoke_runtime.py` tests a **deployed** engine;
-the Docker image, Cloud SQL, the Agent Runtime contract routes and the Cloud Run web backend are all deployed and smoke-tested (see [../README.md](../README.md), "How close to production it is", for what is not).
+the Docker image, Cloud SQL, the Agent Runtime contract routes and the Cloud Run web backend are all deployed and smoke-tested (see [../README.md](../README.md), "What is in place, and what is not", for what is not).
 This page covers only the local CLI and API.
 
 ## 8. Conversations (sessions and turns)

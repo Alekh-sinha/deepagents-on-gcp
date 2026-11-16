@@ -48,4 +48,4 @@ docker run --rm --entrypoint sh -v "$PWD":/app -w /app/terraform hashicorp/terra
 * Sandbox creation takes 30 to 130 s: the warm pool (`warm_sandbox`) hides it. Gemini models newer than 2.5 are served only from the `global` location.
 
 ## State of the deployment
-What is deployed and what is pending changes often: run `deploy/deploy.sh status` (and `deploy/network.sh status`), and read "How close to production it is" in the README for what is and is not in place.
+What is deployed and what is pending changes often: run `deploy/deploy.sh status` (and `deploy/network.sh status`), and read "What is in place, and what is not" in the README for what is and is not in place.
