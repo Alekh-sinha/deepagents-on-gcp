@@ -5,7 +5,7 @@
 #   setup       APIs, Artifact Registry, runtime service account + permissions, secrets            (free)
 #   sql         a small Cloud SQL Postgres + the DATABASE_URL secret                               (BILLED while it exists)
 #   build       Cloud Build builds the image and pushes it to Artifact Registry                    (pennies)
-#   deploy      create or update the Agent Runtime from that image                                 (BILLED while it exists)
+#   deploy      create or update the Agent Runtime from that image; --recreate deletes and creates it again (BILLED while it exists)
 #   scheduler   Cloud Scheduler job that calls the `expire` housekeeping method every 5 minutes     (pennies)
 #   all         setup, sql, build, deploy, scheduler
 #   web-build   Cloud Build builds the WEB BACKEND image (the public face)                             (pennies)
@@ -175,7 +175,7 @@ cmd_deploy() {
   [ -n "$digest" ] && pinned="${IMAGE%:*}@$digest"
   echo "  image: $pinned"
   run "${PYRUN[@]}" deploy/runtime.py apply --project "$PROJECT" --region "$REGION" --image "$pinned" --service-account "$RUNTIME_SA" \
-    --sql-connection "$PROJECT:$REGION:$SQL_INSTANCE" --bucket "$BUCKET"
+    --sql-connection "$PROJECT:$REGION:$SQL_INSTANCE" --bucket "$BUCKET" "$@"   # e.g. --recreate (needed once to move the engine onto a network)
 }
 
 cmd_scheduler() {
@@ -188,9 +188,10 @@ cmd_scheduler() {
     run gcloud iam service-accounts create "$SCHEDULER_SA_ID" --display-name="$NAME scheduler" --project "$PROJECT"
   QUIET_CMD=1 retry 6 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SCHEDULER_SA" --role=roles/aiplatform.user --condition=None --quiet
   local uri="https://$REGION-aiplatform.googleapis.com/v1/$rt:query"
-  local verb=create; exists gcloud scheduler jobs describe "$JOB" --location "$REGION" --project "$PROJECT" && verb=update
+  # `create` takes --headers, `update` takes --update-headers (found when the job had to be re-pointed at a new runtime)
+  local verb=create headers=--headers; exists gcloud scheduler jobs describe "$JOB" --location "$REGION" --project "$PROJECT" && { verb=update; headers=--update-headers; }
   retry 4 gcloud scheduler jobs "$verb" http "$JOB" --location "$REGION" --project "$PROJECT" --schedule="$SCHEDULE" --time-zone=UTC \
-    --uri="$uri" --http-method=POST --headers="Content-Type=application/json" --message-body='{"classMethod":"expire","input":{}}' \
+    --uri="$uri" --http-method=POST "$headers=Content-Type=application/json" --message-body='{"classMethod":"expire","input":{}}' \
     --oauth-service-account-email="$SCHEDULER_SA" --oauth-token-scope=https://www.googleapis.com/auth/cloud-platform
 }
 
@@ -265,7 +266,7 @@ case "${1:-help}" in
   setup) cmd_setup ;;
   sql) cmd_sql ;;
   build) cmd_build ;;
-  deploy) cmd_deploy ;;
+  deploy) shift; cmd_deploy "$@" ;;
   scheduler) cmd_scheduler ;;
   all) cmd_setup; cmd_sql; cmd_build; cmd_deploy; cmd_scheduler ;;
   smoke) shift; cmd_smoke "$@" ;;

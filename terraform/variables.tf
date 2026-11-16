@@ -86,7 +86,7 @@ variable "web_enabled" {
 variable "web_users" {
   type        = list(string)
   default     = null
-  description = "Who may open the web app (e-mail addresses; *.gserviceaccount.com are treated as service accounts). Default: allowed_users in config/policy.yaml."
+  description = "Who may open the web app (e-mail addresses; *.gserviceaccount.com are treated as service accounts). Default: allowed_users in config/policy.local.yaml if it exists, else config/policy.yaml."
 }
 
 variable "web_min_instances" {

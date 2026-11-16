@@ -27,7 +27,10 @@ def show(label: str, r: requests.Response, extra: str = "") -> None:
 
 
 def main() -> int:
-    repo = sys.argv[1] if len(sys.argv) > 1 else "Alekh-sinha/google_translator"
+    if len(sys.argv) < 2 or "/" not in sys.argv[1]:
+        print("usage: debug_github.py OWNER/REPO   (a repository the GitHub App is installed on)", file=sys.stderr)
+        return 2
+    repo = sys.argv[1]
     name = repo.split("/", 1)[1]
     s = Settings.from_env()
     vault = Vault(s.secrets_backend, s.gcp_project)

@@ -23,12 +23,17 @@ DEFAULTS_FILE, LOCAL_FILE = HERE / "config.yaml", HERE / "config.local.yaml"
 ENV_OVERRIDES = {"PB_NAME": "name", "PB_PROJECT": "project", "PB_REGION": "region", "PB_BUCKET": "artifacts_bucket", "PB_SQL_TIER": "sql_tier",
                  "PB_SCHEDULE": "schedule"}
 KEYS = {"name", "project", "region", "artifacts_bucket", "sql_tier", "sql_database", "sql_user", "schedule", "min_instances", "max_instances",
-        "web_min_instances", "web_max_instances", "secrets_from_dotenv", "secrets_provided", "env_exclude"}
+        "web_min_instances", "web_max_instances", "secrets_from_dotenv", "secrets_provided", "env_exclude",
+        "network_attachment", "egress_proxy", "egress_allowed_hosts", "sql_private_ip", "network_dns_domains"}
 POLICY_FILE = HERE.parent / "config" / "policy.yaml"
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,18}[a-z0-9]$")  # 2-20 chars: '<name>-scheduler' must fit a 30-character service account id
 PROJECT_RE = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
 REGION_RE = re.compile(r"^[a-z]+-[a-z]+[0-9]+$")
 SECRET_RE = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
+ATTACHMENT_RE = re.compile(r"^projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/regions/[a-z]+-[a-z]+[0-9]+/networkAttachments/[a-z]([a-z0-9-]{0,61}[a-z0-9])?\Z")
+DOMAIN_RE = re.compile(r"^(?=.{2,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\.\Z")  # a private DNS zone name: lower-case labels, ending in a dot
+PROXY_RE = re.compile(r"^http://[A-Za-z0-9.-]+:[0-9]{2,5}\Z")
+HOST_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\Z")  # lower-case DNS name; it ends up inside a proxy rule, so be strict
 
 
 class ConfigError(ValueError):
@@ -57,11 +62,32 @@ def _gcloud_project() -> str:
         return ""
 
 
+def _deep_merge(base: Any, over: Any) -> Any:
+    if isinstance(base, dict) and isinstance(over, dict):
+        return {**base, **{k: _deep_merge(base.get(k), v) if k in base else v for k, v in over.items()}}
+    return over
+
+
+def read_policy_data(policy_file: Path) -> dict:
+    """The policy as the app reads it: the shipped file with the optional policy.local.yaml beside it merged over it (a mirror of
+    pinboard.core.policy.read_policy_data, which a test keeps identical; this module stays free of the app's imports). Unreadable = empty."""
+    try:
+        data = yaml.safe_load(policy_file.read_text()) or {}
+        chosen = os.environ.get("PINBOARD_POLICY_LOCAL")
+        extra = None if (chosen or "").lower() == "off" else Path(chosen) if chosen else policy_file.with_name(f"{policy_file.stem}.local{policy_file.suffix}")
+        if extra is not None and extra.exists():
+            override = yaml.safe_load(extra.read_text())
+            if isinstance(override, dict) and isinstance(data, dict):
+                data = _deep_merge(data, override)
+    except (OSError, yaml.YAMLError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _allowed_users(policy_file: Path) -> list[str]:
     """Who may open the web app = who the engine's policy allows (one list, so the two cannot drift apart)."""
-    try:
-        users = (yaml.safe_load(policy_file.read_text()) or {}).get("allowed_users") or []
-    except (OSError, yaml.YAMLError):
+    users = read_policy_data(policy_file).get("allowed_users") or []
+    if not isinstance(users, list):
         return []
     return [str(u).strip().lower() for u in users if isinstance(u, str) and "@" in u]
 
@@ -99,6 +125,21 @@ def load(*, env: Mapping[str, str] | None = None, defaults: Path = DEFAULTS_FILE
         if not isinstance(cfg[key], list) or not all(isinstance(s, str) and SECRET_RE.match(s) for s in cfg[key]):
             raise ConfigError(f"{key} must be a list of names (letters, digits, '_' and '-')")
 
+    if cfg["network_attachment"] and not ATTACHMENT_RE.match(str(cfg["network_attachment"])):
+        raise ConfigError("network_attachment must look like projects/PROJECT/regions/REGION/networkAttachments/NAME (or be empty)")
+    if cfg["egress_proxy"] and not PROXY_RE.match(str(cfg["egress_proxy"])):
+        raise ConfigError("egress_proxy must look like http://10.0.0.5:443 (or be empty)")
+    if cfg["egress_proxy"] and not cfg["network_attachment"]:
+        raise ConfigError("egress_proxy needs network_attachment: without a VPC attachment the engine cannot reach the proxy")
+    if not isinstance(cfg["egress_allowed_hosts"], list) or not all(isinstance(h, str) and HOST_RE.match(h) for h in cfg["egress_allowed_hosts"]):
+        raise ConfigError("egress_allowed_hosts must be a list of lower-case host names such as api.example.com")
+    if not isinstance(cfg["network_dns_domains"], list) or not all(isinstance(d, str) and DOMAIN_RE.match(d) for d in cfg["network_dns_domains"]):
+        raise ConfigError("network_dns_domains must be a list of DNS names that end in a dot, such as mcp.internal.")
+    if cfg["network_dns_domains"] and not cfg["network_attachment"]:
+        raise ConfigError("network_dns_domains needs network_attachment: the names are resolved through the VPC the engine joins")
+    if not isinstance(cfg["sql_private_ip"], bool):
+        raise ConfigError("sql_private_ip must be true or false")
+
     project = str(cfg["project"] or "").strip() or ((project_lookup or _gcloud_project)() if project_lookup is not False else "")
     if project and not PROJECT_RE.match(project):
         raise ConfigError(f"project {project!r} does not look like a Google Cloud project id")
@@ -126,6 +167,7 @@ def load(*, env: Mapping[str, str] | None = None, defaults: Path = DEFAULTS_FILE
         "web_sa": f"{name}-web@{project}.iam.gserviceaccount.com",
         "web_image": f"{region}-docker.pkg.dev/{project}/{name}-repo/{name}-web:latest",
         "web_users": _allowed_users(policy_file),
+        "network": f"{name}-net",
     })
     return out
 
@@ -138,12 +180,15 @@ SHELL_VARS = {
     "sql_database": "DB_NAME", "sql_user": "DB_USER", "db_url_secret": "DB_URL_SECRET", "api_token_secret": "API_TOKEN_SECRET",
     "artifacts_prefix": "ARTIFACTS_PREFIX", "secrets_from_dotenv": "SECRETS_FROM_DOTENV", "secrets_provided": "SECRETS_PROVIDED", "env_exclude": "ENV_EXCLUDE",
     "web_service": "WEB_SERVICE", "web_sa_id": "WEB_SA_ID", "web_sa": "WEB_SA", "web_image": "WEB_IMAGE", "web_min_instances": "WEB_MIN",
-    "web_max_instances": "WEB_MAX", "web_users": "WEB_USERS",
+    "web_max_instances": "WEB_MAX", "web_users": "WEB_USERS", "network_attachment": "NETWORK_ATTACHMENT", "egress_proxy": "EGRESS_PROXY",
+    "sql_private_ip": "SQL_PRIVATE_IP", "network_dns_domains": "NETWORK_DNS_DOMAINS", "network": "NETWORK",
 }
 
 
 def shell_lines(cfg: Mapping[str, Any]) -> str:
     def val(v: Any) -> str:
+        if isinstance(v, bool):
+            return "true" if v else ""  # bash: empty = off
         return " ".join(v) if isinstance(v, list) else str(v)
     return "\n".join(f"{var}={shlex.quote(val(cfg[key]))}" for key, var in SHELL_VARS.items())
 

@@ -1,5 +1,5 @@
 # Names, project, region and sizes come from deploy/config.yaml (+ deploy/config.local.yaml). Only these two are needed here:
 sandbox_runtime    = "projects/.../locations/us-central1/sandboxRuntimes/..."   # SANDBOX_RUNTIME from .env
-# github_app_id      = "5197239"
-# agentmail_inbox_id = "privai-agent-0909@agentmail.to"
+# github_app_id      = "123456"
+# agentmail_inbox_id = "your-inbox@agentmail.to"
 # Any setting can still be overridden here, e.g.:  name = "other-name"   project_id = "other-project"

@@ -5,6 +5,7 @@ which models). A missing or invalid file raises PolicyError so the app never sta
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 from dataclasses import dataclass, field
@@ -86,6 +87,11 @@ class McpPolicy:
     max_tools_per_server: int = 40
     tool_timeout_seconds: int = 60
     max_result_chars: int = 20_000
+    # Where a user may point a server. "open" (default, the original behaviour): any public https host, or only `allowed_hosts` when that is set.
+    # "vpc_or_allowlist": a server is accepted ONLY if every address it resolves to lies inside `vpc_ranges` (your own network: assumed approved,
+    # http or https) or its host name is in `allowed_hosts` (public, https only); anything else is refused with a message that says so.
+    scope: str = "open"
+    vpc_ranges: tuple[str, ...] = ()      # CIDR blocks reserved for MCP servers inside your VPC, e.g. 192.168.40.0/24
 
 
 @dataclass(frozen=True)
@@ -257,9 +263,40 @@ def _mcp(raw: Any) -> McpPolicy:
     hosts = m.get("allowed_hosts") or []
     if not (isinstance(hosts, list) and all(isinstance(h, str) and _HOST.match(h.strip().lower()) for h in hosts)):
         raise PolicyError("policy: mcp.allowed_hosts must be a list of host names (no scheme, no port)")
-    return McpPolicy(_bool(m, "enabled", False, "mcp."), tuple(dict.fromkeys(h.strip().lower() for h in hosts)), _bool(m, "allow_private_hosts", False, "mcp."),
+    scope = m.get("scope", "open")
+    if scope not in MCP_SCOPES:
+        raise PolicyError(f"policy: mcp.scope must be one of {', '.join(MCP_SCOPES)}")
+    ranges = _vpc_ranges(m.get("vpc_ranges"))
+    allow_private = _bool(m, "allow_private_hosts", False, "mcp.")
+    if scope != "open" and allow_private:
+        raise PolicyError("policy: mcp.allow_private_hosts cannot be combined with mcp.scope: vpc_or_allowlist (the ranges decide what counts as private)")
+    return McpPolicy(_bool(m, "enabled", False, "mcp."), tuple(dict.fromkeys(h.strip().lower() for h in hosts)), allow_private,
                      _int(m, "max_servers_per_user", 10, "mcp.", 1), _int(m, "max_tools_per_server", 40, "mcp.", 1),
-                     _int(m, "tool_timeout_seconds", 60, "mcp.", 1), _int(m, "max_result_chars", 20_000, "mcp.", 100))
+                     _int(m, "tool_timeout_seconds", 60, "mcp.", 1), _int(m, "max_result_chars", 20_000, "mcp.", 100), scope=scope, vpc_ranges=ranges)
+
+
+MCP_SCOPES = ("open", "vpc_or_allowlist")
+_NEVER_RANGES = tuple(ipaddress.ip_network(n) for n in ("0.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "224.0.0.0/4", "240.0.0.0/4"))
+
+
+def _vpc_ranges(raw: Any) -> tuple[str, ...]:
+    """CIDR blocks for MCP servers: private IPv4, no wider than a /16, never loopback / link-local (the metadata server) / multicast."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise PolicyError("policy: mcp.vpc_ranges must be a list of CIDR blocks such as 192.168.40.0/24")
+    out = []
+    for item in raw:
+        try:
+            net = ipaddress.ip_network(str(item).strip(), strict=True)
+        except ValueError as exc:
+            raise PolicyError(f"policy: mcp.vpc_ranges entry {item!r} is not a valid CIDR block ({exc})") from exc
+        if net.version != 4 or not net.is_private or net.prefixlen < 16:
+            raise PolicyError(f"policy: mcp.vpc_ranges entry {item!r} must be a private IPv4 block no wider than /16")
+        if any(net.overlaps(bad) for bad in _NEVER_RANGES):
+            raise PolicyError(f"policy: mcp.vpc_ranges entry {item!r} overlaps loopback, link-local (the metadata server) or reserved space")
+        out.append(str(net))
+    return tuple(dict.fromkeys(out))
 
 
 def _schedules(raw: Any) -> SchedulePolicy:
@@ -356,14 +393,46 @@ def parse_policy(data: Any) -> Policy:
                   features=_features(data.get("features"), warm.mode))
 
 
-def load_policy(path: str | os.PathLike | None = None) -> Policy:
-    """Load from ``path``, else $PINBOARD_POLICY, else ./config/policy.yaml. Fails closed."""
+def _deep_merge(base: Any, over: Any) -> Any:
+    """Mappings merge key by key; anything else (a list, a number, a string) is REPLACED by the override, so a local list never gets appended to."""
+    if isinstance(base, dict) and isinstance(over, dict):
+        return {**base, **{k: _deep_merge(base.get(k), v) if k in base else v for k, v in over.items()}}
+    return over
+
+
+def _local_policy_path(p: Path, local: str | os.PathLike | None) -> Path | None:
+    """Where the optional personal override lives: ``local`` if given, else $PINBOARD_POLICY_LOCAL ("off" = none), else policy.local.yaml next to the policy."""
+    chosen = local if local is not None else os.environ.get("PINBOARD_POLICY_LOCAL")
+    if chosen is None or chosen == "":
+        return p.with_name(f"{p.stem}.local{p.suffix}")
+    return None if str(chosen).lower() == "off" else Path(chosen)
+
+
+def read_policy_data(path: str | os.PathLike | None = None, *, local: str | os.PathLike | None = None) -> dict:
+    """The policy as plain data: the shipped file, with the optional git-ignored ``policy.local.yaml`` beside it merged over it. The shipped file holds
+    placeholders (no personal e-mail address); your own values live in the local file. A missing local file is fine; an unreadable or invalid one is not."""
     p = Path(path or os.environ.get("PINBOARD_POLICY") or DEFAULT_POLICY_PATH)
     try:
         text = p.read_text()
     except OSError as exc:
         raise PolicyError(f"policy file not found or unreadable: {p} ({exc.strerror or exc})") from exc
     try:
-        return parse_policy(yaml.safe_load(text))
+        data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise PolicyError(f"policy file {p} is not valid YAML: {exc}") from exc
+    extra = _local_policy_path(p, local)
+    if extra is not None and extra.exists():
+        try:
+            override = yaml.safe_load(extra.read_text())
+        except (OSError, yaml.YAMLError) as exc:
+            raise PolicyError(f"local policy file {extra} cannot be read: {exc}") from exc
+        if override is not None:
+            if not isinstance(override, dict) or not isinstance(data, dict):
+                raise PolicyError(f"local policy file {extra} must be a mapping, like {p.name}")
+            data = _deep_merge(data, override)
+    return data
+
+
+def load_policy(path: str | os.PathLike | None = None, *, local: str | os.PathLike | None = None) -> Policy:
+    """Load from ``path``, else $PINBOARD_POLICY, else ./config/policy.yaml (+ policy.local.yaml beside it, if present). Fails closed."""
+    return parse_policy(read_policy_data(path, local=local))

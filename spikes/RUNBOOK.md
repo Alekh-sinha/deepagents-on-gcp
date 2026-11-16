@@ -1,3 +1,7 @@
+> **Historical.** This was the runbook for the first spike in October 2026, written for a session in which each command was run by a person and the output pasted back to an assistant (hence "send me").
+> The spike has been run, its resources deleted and its answers are in [README.md](README.md). The commands are kept as a record of how it was done: they have not been re-run since, and steps 3 and 5
+> create billed resources (Cloud SQL, an Agent Runtime) until `down`. Sections 3 and 4 were instructions for that session. For a deployment you actually want, use `deploy/deploy.sh` (see the main README).
+
 # Spike runbook (you run it, then paste the output back)
 
 All commands run from `pinboard-agent/`. Total time about 30-40 min (Cloud SQL creation is the slow part). Paste back **everything the

@@ -4,7 +4,7 @@
 set -e
 if [ -n "$SQL_CONNECTION" ]; then
   proxy_port="${SQL_PROXY_PORT:-5432}"  # the app's DATABASE_URL must use the same port
-  # SQL_PRIVATE_IP=true: the database has only a private address (reached through the VPC), used behind Agent Gateway
+  # SQL_PRIVATE_IP=true: the database has only a private address (reached through the VPC attachment, see docs/EGRESS.md)
   if [ -n "$SQL_PRIVATE_IP" ]; then private_ip="--private-ip"; else private_ip=""; fi
   # shellcheck disable=SC2086  # $private_ip is intentionally empty or a single flag
   cloud-sql-proxy --address 127.0.0.1 --port "$proxy_port" $private_ip "$SQL_CONNECTION" &

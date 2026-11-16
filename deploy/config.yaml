@@ -24,6 +24,17 @@ max_instances: 2
 #   secrets_provided     secrets NOT in .env (e.g. a key file): `setup` only tells you which are missing
 #   env_exclude          .env variables that must never reach the cloud (on top of the built-in list of local-only and deployment-managed names)
 # Terraform cannot read .env, so it creates empty Secret Manager entries for the names in the first two lists.
+# Private networking and egress control (OFF by default: an empty value changes nothing). See docs/EGRESS.md.
+#   network_attachment    projects/P/regions/R/networkAttachments/NAME  -> the engine joins your VPC through Private Service Connect (no direct internet)
+#   egress_proxy          http://HOST:PORT of the Secure Web Proxy in that VPC (`deploy.sh network` prints it): the ONLY way out to third-party hosts
+#   egress_allowed_hosts  extra host names the proxy lets through, on top of the built-in ones and the MCP hosts in config/policy.yaml
+#   sql_private_ip        true when the Cloud SQL instance has a private address only (the Cloud SQL proxy then runs with --private-ip)
+#   network_dns_domains   private DNS domains (ending in a dot) the engine resolves through your VPC, so an MCP server can be reached by name
+network_attachment: ""
+egress_proxy: ""
+egress_allowed_hosts: []
+sql_private_ip: false
+network_dns_domains: []   # private DNS names the engine must resolve inside your VPC, e.g. ["mcp.internal."] (DNS peering; needed to reach an MCP server by NAME)
 web_min_instances: 0          # the web backend (Cloud Run behind IAP); 0 = scales to zero, the first request after a pause is slower
 web_max_instances: 3
 

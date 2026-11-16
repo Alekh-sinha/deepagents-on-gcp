@@ -5,11 +5,15 @@ engine that may be replaced between two calls: nothing to keep alive, nothing to
 from __future__ import annotations
 
 import asyncio
+import functools
+import ipaddress
+import socket
 import threading
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Awaitable, TypeVar
+from urllib.parse import urlsplit
 
 import httpx
 from mcp import ClientSession
@@ -54,23 +58,41 @@ def explain(exc: BaseException) -> str:
 READ_SECONDS = 300.0
 
 
-def _client(headers: dict[str, str] | None, timeout: float) -> httpx.AsyncClient:
+def goes_direct(url: str, resolver=socket.getaddrinfo) -> bool:
+    """True when every address behind ``url`` is private (inside our own network): such a server is contacted DIRECTLY, never through the egress proxy.
+    httpx does not understand address ranges in NO_PROXY (requests and Go do), and a host NAME can never match a range, so the decision is made here.
+    Anything public, or anything that cannot be resolved, keeps the environment's proxy settings (a public host is reachable only through the proxy)."""
+    host = (urlsplit(url).hostname or "").strip("[]")
+    try:
+        addrs = [ipaddress.ip_address(host)]
+    except ValueError:
+        try:
+            addrs = [ipaddress.ip_address(i[4][0].split("%")[0]) for i in resolver(host, None)]
+        except (OSError, ValueError):
+            return False
+    return bool(addrs) and not any(a.is_global for a in addrs)
+
+
+def _client(headers: dict[str, str] | None, timeout: float, direct: bool = False) -> httpx.AsyncClient:
     """Redirects are NOT followed. The address was checked before connecting (https, public host); a server that answered with a redirect could
-    otherwise send the engine on to an address that would never have passed that check (an internal service, the metadata server)."""
-    return httpx.AsyncClient(headers=headers or None, timeout=httpx.Timeout(timeout, read=READ_SECONDS), follow_redirects=False)
+    otherwise send the engine on to an address that would never have passed that check (an internal service, the metadata server).
+    ``direct`` ignores the proxy settings of the environment (a server inside our own network)."""
+    return httpx.AsyncClient(headers=headers or None, timeout=httpx.Timeout(timeout, read=READ_SECONDS), follow_redirects=False, trust_env=not direct)
 
 
-def _sse_factory(headers=None, timeout=None, auth=None) -> httpx.AsyncClient:   # what sse_client calls to make its client
-    return httpx.AsyncClient(headers=headers, timeout=timeout or httpx.Timeout(30.0), auth=auth, follow_redirects=False)
+def _sse_factory(headers=None, timeout=None, auth=None, direct: bool = False) -> httpx.AsyncClient:   # what sse_client calls to make its client
+    return httpx.AsyncClient(headers=headers, timeout=timeout or httpx.Timeout(30.0), auth=auth, follow_redirects=False, trust_env=not direct)
 
 
 @asynccontextmanager
 async def _session(url: str, headers: dict[str, str], transport: str, timeout: float):
+    direct = await asyncio.to_thread(goes_direct, url)   # a DNS lookup: keep it off the event loop
     async with AsyncExitStack() as stack:
         if transport == "sse":
-            streams = await stack.enter_async_context(sse_client(url, headers=headers or None, timeout=timeout, httpx_client_factory=_sse_factory))
+            factory = functools.partial(_sse_factory, direct=direct)
+            streams = await stack.enter_async_context(sse_client(url, headers=headers or None, timeout=timeout, httpx_client_factory=factory))
         else:
-            http = await stack.enter_async_context(_client(headers, timeout))
+            http = await stack.enter_async_context(_client(headers, timeout, direct))
             streams = await stack.enter_async_context(streamable_http_client(url, http_client=http))
         async with ClientSession(streams[0], streams[1]) as session:
             await asyncio.wait_for(session.initialize(), timeout)

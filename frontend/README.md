@@ -28,7 +28,7 @@ cd frontend && npm run dev                # terminal 2: http://localhost:5173
 The demo model reads keywords in your message (`shell`, `plan`, `ask`, `parallel`, `research`, `file`, `todo`, `mcp`, `slow`, `fail`; the list is at the top of
 `scripts/dev_stack.py`). The MCP server's address is printed at start-up: paste it in **Connectors**.
 
-**B. Against your real deployment** (needs the backend of this round deployed: `deploy/deploy.sh build`, `deploy`, `setup`):
+**B. Against your real deployment** (the engine must be deployed: see [../deploy/README.md](../deploy/README.md); `scripts/run_local_ui.sh start|stop|status|logs` runs this for you from the settings in `.env.local-ui`):
 
 ```bash
 # terminal 1: the web backend on your computer, talking to the cloud engine as you
@@ -37,7 +37,7 @@ RUNTIME_RESOURCE=projects/PROJECT_NUMBER/locations/us-central1/reasoningEngines/
 uv run pinboard web --host 127.0.0.1 --port 8081
 cd frontend && npm run dev                # terminal 2
 ```
-`DEV_USER_EMAIL` must be on `allowed_users` in `config/policy.yaml`. `WEB_AUTH=dev` signs you in as that one user, which is fine on your own computer.
+`DEV_USER_EMAIL` must be on `allowed_users` in your policy (`config/policy.local.yaml`, merged over `config/policy.yaml`). `WEB_AUTH=dev` signs you in as that one user, which is fine on your own computer.
 
 **C. With "Sign in with Google"** (real sign-in; what you would use if the backend were hosted):
 
@@ -48,7 +48,7 @@ cd frontend && npm run dev                # terminal 2
    WEB_AUTH=google GOOGLE_OAUTH_CLIENT_ID=123-abc.apps.googleusercontent.com SESSION_SECRET=$(openssl rand -hex 32) \
    RUNTIME_RESOURCE=... uv run pinboard web --host 127.0.0.1 --port 8081
    ```
-Only accounts on `allowed_users` can sign in. The browser gets a signed, HttpOnly cookie, never a token it could read.
+Only accounts on `allowed_users` can sign in (the engine decides, from the same policy). The browser gets a signed, HttpOnly cookie, never a token it could read.
 
 To serve the built app from the backend instead of Vite: `npm run build`, then run the backend with `STATIC_DIR=frontend/dist` (deep links and reloads work).
 
@@ -73,3 +73,6 @@ Screenshots of every page are written to `frontend/screenshots/` by the browser 
 | `src/pages` | sign-in, scheduled tasks, connectors, files, settings |
 
 The backend's contract is in `src/pinboard/web/app.py`; every route there is a thin relay to one engine method.
+
+**Connectors and where servers may live.** When the policy limits MCP servers (`mcp.scope: vpc_or_allowlist`), the Connectors page shows the rule in plain words, taken from the engine's `get_config`: only servers inside the private network range, or on the approved list, can be added;
+anything else is refused with a message. See [../docs/EGRESS.md](../docs/EGRESS.md#mcp-servers-where-they-can-live).

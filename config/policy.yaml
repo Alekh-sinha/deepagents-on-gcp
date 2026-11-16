@@ -1,14 +1,17 @@
 # Pinboard policy: hard limits enforced INSIDE the tools, before any approval is requested.
 # Edit and restart (or redeploy) to change. A missing or invalid file stops the app: it fails closed.
 
+# PERSONAL VALUES: the addresses below are placeholders. Put your own in config/policy.local.yaml (git-ignored, merged over this file: see
+# policy.local.example.yaml). Until you do, nobody can sign in and nothing can be e-mailed (the policy fails closed).
+
 # Google accounts allowed to use the app (checked by the frontend server and by the engine).
 allowed_users:
-  - alekh.sinha09@gmail.com
+  - you@example.com
 
 email:
-  from_inbox: privai-agent-0909@agentmail.to
+  from_inbox: your-inbox@agentmail.to
   allowed_recipients:            # ONLY these addresses can ever be emailed (to, cc and bcc)
-    - alekh.sinha09@gmail.com
+    - you@example.com
   max_per_day: 20
   max_attachment_mb: 5
 
@@ -46,8 +49,13 @@ approvals:
 
 mcp:                             # bring-your-own MCP servers: a user pastes a standard `mcpServers` JSON for a server that is already deployed (HTTP)
   enabled: true
-  allowed_hosts: []              # [] = any public host; list host names to restrict (recommended once you know which servers you use)
-  allow_private_hosts: false     # true only for local development: lets a server live on localhost or a private network
+  # Where a user may point a server. "vpc_or_allowlist": ONLY a server inside the private network (vpc_ranges: approved automatically, http or https)
+  # or on the approved list (allowed_hosts: public hosts, https only). Anything else is refused with a message saying so. "open" = any public https host.
+  scope: vpc_or_allowlist
+  vpc_ranges: [192.168.40.0/24]  # the block reserved for MCP servers in your VPC (deploy/network.sh creates this subnet from this same line)
+  allowed_hosts: []              # public hosts users may add. With scope vpc_or_allowlist, [] means NONE. They are ALSO the egress proxy's allowlist
+                                 # (docs/EGRESS.md): after changing them, redeploy the engine and run deploy/network.sh allowlist
+  allow_private_hosts: false     # local development only (scope: open): lets a server live on localhost or a private network. Not allowed with vpc_or_allowlist
   max_servers_per_user: 10
   max_tools_per_server: 40
   tool_timeout_seconds: 60       # one tool call

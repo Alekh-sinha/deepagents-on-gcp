@@ -91,7 +91,20 @@ class Scenario:
             for i, v in enumerate(values, 1):
                 text = text.replace(v, f"<{kind}{i}>")
         data = json.loads(text)
-        return _zero_timings(data)
+        return _path_independent(_zero_timings(data), len(str(self.tmp)) - len("<TMP>"))
+
+
+def _path_independent(node, shrink):
+    """A tool result's `chars` counts the characters of the absolute temp path inside its text; the path depends on where the tests run. Count them as
+    if the path had been written as <TMP>, so the record is the same on every machine (added 2026-11-16: it failed on the unchanged code under another TMPDIR)."""
+    if isinstance(node, dict):
+        out = {k: _path_independent(v, shrink) for k, v in node.items()}
+        if isinstance(out.get("chars"), int) and isinstance(out.get("preview"), str) and "<TMP>" in out["preview"]:
+            out["chars"] -= shrink * out["preview"].count("<TMP>")
+        return out
+    if isinstance(node, list):
+        return [_path_independent(v, shrink) for v in node]
+    return node
 
 
 def _zero_timings(node):

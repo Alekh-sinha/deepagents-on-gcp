@@ -76,6 +76,8 @@ class SessionsMixin:
                           "auto_approve": auto.describe_options(p.limits.max_auto_approvals_per_turn, p.limits.max_auto_approvals_per_turn, p.never_auto_tools)},
             "warm_sandbox": {"mode": p.warm_sandbox.mode},
             "features": {"sandbox": p.features.sandbox, "artifacts": p.features.artifacts},
+            # where a user may point an MCP server (the UI explains the rule from this; nothing secret)
+            "mcp": {"enabled": p.mcp.enabled, "scope": p.mcp.scope, "vpc_ranges": list(p.mcp.vpc_ranges), "allowed_hosts": list(p.mcp.allowed_hosts)},
         }
 
     def get_transcript(self, session_id: str, *, user_id: str | None = None, limit: int = 20, before_turn_id: str | None = None) -> dict:

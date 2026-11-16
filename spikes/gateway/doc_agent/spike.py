@@ -27,7 +27,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 STATE, SECRET = HERE / ".state.json", HERE / ".secret"
-PROJECT, REGION = "automation-ai-507911", "us-central1"
+PROJECT, REGION = os.environ.get("PB_PROJECT", "your-project-id"), "us-central1"   # set PB_PROJECT
 INSTANCE = os.environ.get("PB_SQL_INSTANCE", "pinboard-pg")   # pbgw-pg = the private-IP-only instance
 IP_TYPE = os.environ.get("PB_IP_TYPE", "PUBLIC")             # PRIVATE for pbgw-pg
 DB, USER = "docspike", "docspike"

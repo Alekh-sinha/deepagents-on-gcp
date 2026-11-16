@@ -5,6 +5,7 @@ import { Icon } from "../components/ui/Icon";
 import { Empty, ErrorNote, PageShell } from "../components/ui/PageShell";
 import { Toggle } from "../components/ui/Toggle";
 import { relativeTime } from "../lib/format";
+import { useAuth } from "../state/auth";
 
 const messageOf = (e: unknown) => (e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Something went wrong.");
 const EXAMPLE = `{
@@ -15,6 +16,25 @@ const EXAMPLE = `{
     }
   }
 }`;
+
+/** Says where a server may live when the administrator limited it: inside the private network, or on the approved list. Nothing is shown when anything goes. */
+function RuleNote() {
+  const auth = useAuth();
+  const mcp = auth.state.status === "signedIn" ? auth.state.appConfig.mcp : undefined;
+  if (!mcp || mcp.scope !== "vpc_or_allowlist") return null;
+  const ranges = mcp.vpc_ranges.length ? mcp.vpc_ranges.join(", ") : "none set";
+  const hosts = mcp.allowed_hosts.length ? mcp.allowed_hosts.join(", ") : "none yet";
+  return (
+    <div className="card mb-6 p-4" role="note" aria-label="Which servers can be added">
+      <h2 className="text-[14px] font-semibold">Which servers can be added</h2>
+      <p className="mt-1 text-[13.5px] text-muted">
+        Only servers <b className="font-medium text-ink">inside our private network</b> (<code className="rounded bg-chrome px-1">{ranges}</code>) are approved automatically,
+        or servers on the <b className="font-medium text-ink">approved list</b> (<code className="rounded bg-chrome px-1">{hosts}</code>). Any other address is refused.
+        To use another server, ask the administrator.
+      </p>
+    </div>
+  );
+}
 
 function ImportBox({ onDone }: { onDone: () => void }) {
   const [text, setText] = useState("");
@@ -110,6 +130,7 @@ export function ConnectorsPage() {
   useEffect(() => { void load(); }, [load]);
   return (
     <PageShell title="Connectors" subtitle="Bring your own tools. Connect an MCP server and privai can use its tools in any conversation, asking you first unless you say otherwise.">
+      <RuleNote />
       <ImportBox onDone={() => void load()} />
       <ErrorNote message={error} onDismiss={() => setError("")} />
       {servers === null && !error && <p className="text-[13px] text-faint" role="status">Loading…</p>}

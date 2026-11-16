@@ -1,0 +1,16 @@
+# Your own values. Copy this file to config/policy.local.yaml (it is git-ignored) and edit it.
+# It is merged over config/policy.yaml: mappings are merged key by key, a list or a value here REPLACES the shipped one.
+# Only put here what is yours; everything else comes from policy.yaml. The deploy tools and the image build read it too.
+
+allowed_users:                   # who may sign in (the web app uses the same list)
+  - you@example.com
+
+email:
+  from_inbox: your-inbox@agentmail.to         # the AgentMail inbox the agent sends from
+  allowed_recipients:                          # ONLY these addresses can ever be e-mailed
+    - you@example.com
+
+# github:
+#   allowed_repos: ["your-name/your-repo"]     # [] = every repo the GitHub App installation can see
+# mcp:
+#   allowed_hosts: ["mcp.vendor.example"]      # public MCP hosts users may add (also the egress proxy's allowlist: see docs/EGRESS.md)

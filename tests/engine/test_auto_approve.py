@@ -268,3 +268,13 @@ def test_the_policy_list_is_validated():
     assert parse_policy(d).never_auto_tools == ()
     d["approvals"] = {"never_auto_tools": ["a", "b", "a"]}
     assert parse_policy(d).never_auto_tools == ("a", "b")
+
+
+def test_a_whole_number_that_arrives_as_a_float_is_accepted_because_agent_runtime_sends_every_json_number_as_one():
+    """Found on the deployed engine: the per-turn cap 5 arrived as 5.0 and was refused as 'not a whole number'."""
+    n = lambda v: auto.normalise(v, default_cap=25, hard_cap=25)  # noqa: E731
+    assert n({"kinds": ["mcp"], "max_per_turn": 5.0}) == {"kinds": ["mcp"], "max_per_turn": 5}
+    assert isinstance(n({"kinds": ["shell"], "max_per_turn": 3.0})["max_per_turn"], int)
+    for bad in (2.5, 0.0, float("nan"), float("inf"), -1.0):
+        with pytest.raises(BadRequest):
+            n({"kinds": ["shell"], "max_per_turn": bad})

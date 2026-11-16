@@ -226,7 +226,7 @@
     {
      "payload": {
       "agent": "assistant",
-      "chars": 146,
+      "chars": 39,
       "name": "write_file",
       "preview": "Updated file <TMP>/sandboxes/sb-1/f.txt",
       "status": "success",
@@ -352,7 +352,7 @@
     {
      "payload": {
       "agent": "assistant",
-      "chars": 146,
+      "chars": 39,
       "name": "write_file",
       "preview": "Updated file <TMP>/sandboxes/sb-2/g.txt",
       "status": "success",
@@ -767,7 +767,7 @@
      {
       "payload": {
        "agent": "assistant",
-       "chars": 149,
+       "chars": 42,
        "name": "write_file",
        "preview": "Updated file <TMP>/sandboxes/sb-1/out/r.md",
        "status": "success",
@@ -1829,7 +1829,7 @@
     {
      "payload": {
       "agent": "assistant",
-      "chars": 107,
+      "chars": 39,
       "name": "write_file",
       "preview": "Updated file <TMP>/sandboxes/sb-1/f.txt",
       "status": "success",

@@ -5,44 +5,44 @@
 
 import {
   to = google_artifact_registry_repository.repo
-  id = "projects/automation-ai-507911/locations/us-central1/repositories/pinboard-repo"
+  id = "projects/YOUR_PROJECT_ID/locations/us-central1/repositories/pinboard-repo"
 }
 import {
   to = google_service_account.runtime
-  id = "projects/automation-ai-507911/serviceAccounts/pinboard-runtime@automation-ai-507911.iam.gserviceaccount.com"
+  id = "projects/YOUR_PROJECT_ID/serviceAccounts/pinboard-runtime@YOUR_PROJECT_ID.iam.gserviceaccount.com"
 }
 import {
   to = google_service_account.scheduler
-  id = "projects/automation-ai-507911/serviceAccounts/pinboard-scheduler@automation-ai-507911.iam.gserviceaccount.com"
+  id = "projects/YOUR_PROJECT_ID/serviceAccounts/pinboard-scheduler@YOUR_PROJECT_ID.iam.gserviceaccount.com"
 }
 import {
   to = google_sql_database_instance.pg
-  id = "projects/automation-ai-507911/instances/pinboard-pg"
+  id = "projects/YOUR_PROJECT_ID/instances/pinboard-pg"
 }
 import {
   to = google_sql_database.main
-  id = "projects/automation-ai-507911/instances/pinboard-pg/databases/pinboard"
+  id = "projects/YOUR_PROJECT_ID/instances/pinboard-pg/databases/pinboard"
 }
 import {
   to = google_sql_user.main
-  id = "automation-ai-507911/pinboard-pg/pinboard"
+  id = "YOUR_PROJECT_ID/pinboard-pg/pinboard"
 }
 import {
   to = google_cloud_scheduler_job.housekeeping
-  id = "projects/automation-ai-507911/locations/us-central1/jobs/pinboard-housekeeping"
+  id = "projects/YOUR_PROJECT_ID/locations/us-central1/jobs/pinboard-housekeeping"
 }
 import {
   for_each = toset(["pinboard-database-url", "pinboard-api-token"])
   to       = google_secret_manager_secret.generated[each.key]
-  id       = "projects/automation-ai-507911/secrets/${each.key}"
+  id       = "projects/YOUR_PROJECT_ID/secrets/${each.key}"
 }
 import {
   for_each = toset(["TAVILY_API_KEY", "AGENTMAIL_API_KEY", "GITHUB_APP_PRIVATE_KEY"])
   to       = google_secret_manager_secret.provided[each.key]
-  id       = "projects/automation-ai-507911/secrets/${each.key}"
+  id       = "projects/YOUR_PROJECT_ID/secrets/${each.key}"
 }
 # The existing runtime: its id is in deploy/.state.json. Importing it makes Terraform manage it; a mismatch in settings shows as an update in the plan.
 # import {
 #   to = google_vertex_ai_reasoning_engine.engine
-#   id = "projects/99252288520/locations/us-central1/reasoningEngines/6680122751849594880"
+#   id = "projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID"
 # }

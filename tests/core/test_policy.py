@@ -28,8 +28,8 @@ def pol() -> Policy:
 
 def test_the_shipped_policy_file_is_valid_and_matches_the_decisions():
     p = load_policy("config/policy.yaml")
-    assert p.email.allowed_recipients == ("alekh.sinha09@gmail.com",)
-    assert p.email.from_inbox == "privai-agent-0909@agentmail.to"
+    assert p.email.allowed_recipients == ("you@example.com",) and p.allowed_users == ("you@example.com",)   # placeholders: your own values live in policy.local.yaml
+    assert p.email.from_inbox == "your-inbox@agentmail.to"
     assert p.default_model == "gemini-2.5-flash" and p.github.branch_prefix == "agent/" and p.limits.max_auto_resumes == 1
     assert p.limits.sandbox_idle_minutes == 20
 

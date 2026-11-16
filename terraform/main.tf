@@ -179,7 +179,9 @@ locals {
     var.sandbox_runtime == "" ? {} : { SANDBOX_RUNTIME = var.sandbox_runtime },
     var.github_app_id == "" ? {} : { GITHUB_APP_ID = var.github_app_id },
     var.agentmail_inbox_id == "" ? {} : { AGENTMAIL_INBOX_ID = var.agentmail_inbox_id },
-    var.extra_env, # any other setting of the agent, e.g. AGENT_BUILDER = "my_package.agent:build"
+    local.proxy_env,       # egress proxy for third-party hosts (empty unless egress_proxy is set in deploy/config*.yaml)
+    local.sql_private_env, # the Cloud SQL proxy uses the private address
+    var.extra_env,         # any other setting of the agent, e.g. AGENT_BUILDER = "my_package.agent:build"
   )
 }
 
@@ -199,6 +201,20 @@ resource "google_vertex_ai_reasoning_engine" "engine" {
     deployment_spec {
       min_instances = local.min_instances
       max_instances = local.max_instances
+      dynamic "psc_interface_config" { # the engine joins your VPC (no direct internet); empty network_attachment = no block
+        for_each = local.network_attachment == "" ? [] : [local.network_attachment]
+        content {
+          network_attachment = psc_interface_config.value
+          dynamic "dns_peering_configs" { # private names (e.g. an MCP server inside the VPC) are looked up in the VPC's own DNS zones
+            for_each = local.network_dns_domains
+            content {
+              domain         = dns_peering_configs.value
+              target_project = local.project_id
+              target_network = "${local.name}-net"
+            }
+          }
+        }
+      }
       dynamic "env" {
         for_each = local.env
         content {

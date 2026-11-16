@@ -90,6 +90,7 @@ export interface Config {
   approvals: { shell_commands: boolean; ttl_seconds: number; auto_approve: AutoApproveOptions };
   warm_sandbox: { mode: string };
   features?: { sandbox: boolean; artifacts: boolean };  // absent on an older engine = both on
+  mcp?: { enabled: boolean; scope: string; vpc_ranges: string[]; allowed_hosts: string[] };  // where a user may point an MCP server; absent on an older engine
 }
 
 export interface McpTool { name: string; description: string; needs_approval: boolean }

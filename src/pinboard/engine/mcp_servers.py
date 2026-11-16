@@ -152,7 +152,8 @@ class McpMixin:
             servers = [s for s in self.store.list_mcp_servers(user_id) if s.enabled and s.tools]
             if not servers:
                 return None
-            return build_mcp_tools(servers, policy, cipher_from_vault(self.vault), self.mcp_client, audit)
+            return build_mcp_tools(servers, policy, cipher_from_vault(self.vault), self.mcp_client, audit,
+                                   url_check=lambda url: check_url(url, policy, self._mcp_resolver))
         except Exception:  # noqa: BLE001
             log.exception("could not prepare MCP tools for %s", user_id)
             return None

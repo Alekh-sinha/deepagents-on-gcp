@@ -7,8 +7,10 @@ locals {
   web_service = "${local.name}-web"
   web_image   = "${local.region}-docker.pkg.dev/${local.project_id}/${google_artifact_registry_repository.repo.repository_id}/${local.name}-web:${var.image_tag}"
   # who may open it: the same list the engine's policy uses, unless overridden
-  policy        = yamldecode(file("${path.module}/../config/policy.yaml"))
-  web_users     = var.web_users != null ? var.web_users : [for u in try(local.policy.allowed_users, []) : lower(trimspace(u))]
+  policy = yamldecode(file("${path.module}/../config/policy.yaml"))
+  # your own addresses live in config/policy.local.yaml (git-ignored; it REPLACES the shipped list, like the app's merge). Both branches are strings: see config.tf
+  policy_local  = yamldecode(fileexists("${path.module}/../config/policy.local.yaml") ? file("${path.module}/../config/policy.local.yaml") : "{}")
+  web_users     = var.web_users != null ? var.web_users : [for u in try(local.policy_local.allowed_users, local.policy.allowed_users, []) : lower(trimspace(u))]
   web_user_ids  = toset([for u in local.web_users : endswith(u, ".gserviceaccount.com") ? "serviceAccount:${u}" : "user:${u}"])
   web_instances = { min = coalesce(var.web_min_instances, local.cfg.web_min_instances), max = coalesce(var.web_max_instances, local.cfg.web_max_instances) }
 }

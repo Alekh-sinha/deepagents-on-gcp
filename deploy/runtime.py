@@ -21,6 +21,7 @@ from dotenv import dotenv_values
 sys.path.insert(0, str(Path(__file__).parent))
 import deploy_config  # noqa: E402  (the one place resource names are worked out)
 import dotenv_secrets  # noqa: E402  (which .env variables are secrets and which are plain settings)
+import egress  # noqa: E402  (the proxy settings of the egress control, docs/EGRESS.md)
 
 STATE = Path(__file__).with_name(".state.json")  # --state-file points this somewhere else (the gateway spike keeps its own)
 FRAMEWORK = "langgraph"  # a container deploy is refused without agent_framework (found in the spike)
@@ -84,6 +85,10 @@ def runtime_config(*, project: str, region: str, image: str, service_account: st
         env.setdefault(key, value)
     if parts.secrets or cfg.get("secrets_provided"):  # the engine reads these by name from Secret Manager; the list lets it hide their values in output
         env["EXTRA_SECRET_NAMES"] = ",".join(sorted({*parts.secrets, *cfg.get("secrets_from_dotenv", []), *cfg.get("secrets_provided", [])}))
+    # Private networking (all OFF unless deploy/config*.yaml sets them): a proxy for third-party hosts, and a database with a private address only
+    env.update(egress.proxy_env(cfg))
+    if cfg.get("sql_private_ip"):
+        env["SQL_PRIVATE_IP"] = "true"
     env.update(extra_env or {})
     env = {k: v for k, v in env.items() if v != ""}
     if sandbox and "SANDBOX_RUNTIME" not in env:
@@ -96,7 +101,14 @@ def runtime_config(*, project: str, region: str, image: str, service_account: st
         # egress through Agent Gateway needs an agent identity (it cannot be added to an existing runtime)
         gateway = {"identity_type": "AGENT_IDENTITY", "agent_gateway_config": {"agent_to_anywhere_config": {"agent_gateway": agent_gateway}}}
     sa = {} if agent_gateway else {"service_account": service_account if "@" in service_account else f"{service_account}@{project}.iam.gserviceaccount.com"}  # an agent identity replaces the service account (the API refuses both)
-    psc = {"psc_interface_config": {"network_attachment": psc_attachment}} if psc_attachment else {}  # the runtime itself joins a VPC (private Cloud SQL)
+    psc_attachment = psc_attachment or str(cfg.get("network_attachment") or "")
+    if psc_attachment and agent_gateway:
+        raise SystemExit("a runtime cannot have both a PSC network attachment and an Agent Gateway: the API refuses it (see docs/EGRESS.md)")
+    if cfg.get("egress_proxy") and not psc_attachment:
+        raise SystemExit("egress_proxy is set but there is no network attachment: the engine could not reach the proxy")
+    psc = {"psc_interface_config": {"network_attachment": psc_attachment}} if psc_attachment else {}
+    if psc and cfg.get("network_dns_domains"):  # names under these domains are looked up in your VPC's private DNS zones (an MCP server reached by name)
+        psc["psc_interface_config"]["dns_peering_configs"] = [{"domain": d, "target_project": project, "target_network": cfg["network"]} for d in cfg["network_dns_domains"]]  # the runtime itself joins a VPC (private Cloud SQL)
     return {
         **gateway,
         **psc,

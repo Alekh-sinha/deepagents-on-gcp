@@ -202,6 +202,8 @@ def create_app(runtime: RuntimeClient, auth: Authenticator, *, static_dir: str |
         try:
             email = auth.email(request.headers)
         except AuthError as exc:
+            # say WHY (no cookie / bad signature / expired) so a failed sign-in can be diagnosed; no cookie value is ever logged
+            log.warning("401 on %s %s: %s (cookie header present: %s)", request.method, request.url.path, exc, bool(request.headers.get("cookie")))
             raise HTTPException(401, str(exc)) from exc
         csrf_check(request)
         return email
@@ -239,6 +241,7 @@ def create_app(runtime: RuntimeClient, auth: Authenticator, *, static_dir: str |
                 raise
             secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
             response.set_cookie(auth.cookie_name, cookie, max_age=auth.lifetime, httponly=True, samesite="lax", secure=secure, path="/")
+            log.info("signed in %s: session cookie issued (secure=%s) for Host=%s Origin=%s", email, secure, request.headers.get("host"), request.headers.get("origin"))
             return {"email": email}
 
         @app.post("/api/auth/logout")

@@ -6,6 +6,8 @@ import type { McpServer } from "../api/types";
 const api = vi.hoisted(() => ({ mcpServers: vi.fn(), mcpImport: vi.fn(), mcpPatch: vi.fn(), mcpTest: vi.fn(), mcpDelete: vi.fn() }));
 vi.mock("../api/client", () => ({ api, ApiError: class extends Error {} }));
 vi.mock("../state/nav", () => ({ useNav: () => ({ open: false, setOpen: vi.fn() }) }));
+const auth = vi.hoisted(() => ({ mcp: undefined as undefined | { enabled: boolean; scope: string; vpc_ranges: string[]; allowed_hosts: string[] } }));
+vi.mock("../state/auth", () => ({ useAuth: () => ({ state: { status: "signedIn", user: "me@x.com", config: {}, appConfig: { mcp: auth.mcp } } }) }));
 
 import { ConnectorsPage } from "./ConnectorsPage";
 
@@ -14,7 +16,7 @@ const server = (over: Partial<McpServer> = {}): McpServer => ({
   tools: [{ name: "add", description: "Add two numbers", needs_approval: true }, { name: "shout", description: "", needs_approval: true }], tool_count: 2, tools_checked_at: new Date().toISOString(), last_error: "", ...over,
 });
 const mount = () => render(<MemoryRouter><ConnectorsPage /></MemoryRouter>);
-beforeEach(() => { Object.values(api).forEach((f) => f.mockReset()); api.mcpServers.mockResolvedValue({ servers: [] }); });
+beforeEach(() => { auth.mcp = undefined; Object.values(api).forEach((f) => f.mockReset()); api.mcpServers.mockResolvedValue({ servers: [] }); });
 
 describe("the list", () => {
   it("invites you to add the first server", async () => {
@@ -121,5 +123,29 @@ describe("a server's controls", () => {
     vi.spyOn(window, "confirm").mockReturnValueOnce(true);
     await user.click(screen.getByRole("button", { name: /Remove/ }));
     expect(api.mcpDelete).toHaveBeenCalledWith("calc");
+  });
+});
+
+describe("the rule about where servers can live", () => {
+  it("is not shown when any server may be added", async () => {
+    mount();
+    await screen.findByText("No servers connected");
+    expect(screen.queryByRole("note", { name: /which servers can be added/i })).not.toBeInTheDocument();
+  });
+
+  it("names the private network and the approved list, and says anything else is refused", async () => {
+    auth.mcp = { enabled: true, scope: "vpc_or_allowlist", vpc_ranges: ["192.168.40.0/24"], allowed_hosts: ["mcp.vendor.example"] };
+    mount();
+    const note = await screen.findByRole("note", { name: /which servers can be added/i });
+    expect(within(note).getByText("192.168.40.0/24")).toBeInTheDocument();
+    expect(within(note).getByText("mcp.vendor.example")).toBeInTheDocument();
+    expect(note).toHaveTextContent(/any other address is refused/i);
+    expect(note).toHaveTextContent(/ask the administrator/i);
+  });
+
+  it("says plainly when nothing is on the list yet", async () => {
+    auth.mcp = { enabled: true, scope: "vpc_or_allowlist", vpc_ranges: ["192.168.40.0/24"], allowed_hosts: [] };
+    mount();
+    expect(await screen.findByText("none yet")).toBeInTheDocument();
   });
 });

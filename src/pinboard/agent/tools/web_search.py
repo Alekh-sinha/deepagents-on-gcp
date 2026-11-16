@@ -21,12 +21,32 @@ def format_results(data) -> str:
     return "\n".join(lines)
 
 
+class SyncOnlySearch:
+    """Wraps Tavily's client so that EVERY call, sync or async, goes through its synchronous (``requests``) code.
+
+    Why: with an egress proxy (HTTPS_PROXY, see docs/EGRESS.md) the engine can only reach the internet through it. ``requests`` reads those
+    variables; Tavily's async path uses ``aiohttp.ClientSession()``, which does not, so an ``ainvoke`` would try to connect directly and time out.
+    Verified by tests/agent/test_egress_proxy.py.
+    """
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+
+    def invoke(self, *args, **kwargs):
+        return self._inner.invoke(*args, **kwargs)
+
+    async def ainvoke(self, *args, **kwargs):
+        import asyncio
+
+        return await asyncio.to_thread(self._inner.invoke, *args, **kwargs)
+
+
 def make_web_search_tool(api_key: str, max_results: int = 5, client=None):
     """Build the web_search tool. ``client`` is injectable for tests."""
     if client is None:
         from langchain_tavily import TavilySearch
 
-        client = TavilySearch(max_results=max_results, tavily_api_key=api_key)
+        client = SyncOnlySearch(TavilySearch(max_results=max_results, tavily_api_key=api_key))
 
     @tool
     def web_search(query: str) -> str:

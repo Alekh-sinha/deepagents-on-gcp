@@ -1,6 +1,6 @@
-# How to run Pinboard (Phase 2)
+# How to run Pinboard locally (CLI and API)
 
-> This is the **local** walkthrough (CLI and a laptop-hosted API). For the cloud, see [../deploy/README.md](../deploy/README.md); for the overview, [../README.md](../README.md).
+> This is the **local** walkthrough: the CLI and a laptop-hosted API. For the **web app** (and a no-cloud demo of it) see [../frontend/README.md](../frontend/README.md); for the cloud, [../deploy/README.md](../deploy/README.md); for the overview, [../README.md](../README.md).
 
 
 Pinboard runs **on your laptop**. It uses **GCP** for two things: the sandbox where commands execute, and Gemini (via Vertex AI).
@@ -52,7 +52,7 @@ uv run pinboard run "Build a short market brief and save it to out/brief.md"
 ```
 Files the agent saves in `/workspace/out` are downloaded to `./outputs/<run id>/` before the sandbox is deleted.
 
-## 5B. Server mode with approvals (Phase 2)
+## 5B. Server mode with approvals
 
 **Pick where state lives**
 
@@ -88,7 +88,7 @@ uv run pinboard serve --port 8080
 export PINBOARD_API_TOKEN=<same value as in .env>
 H="Authorization: Bearer $PINBOARD_API_TOKEN"
 
-# 1) Start a run. This request BLOCKS for a few minutes while the sandbox is created.
+# 1) Start a run. This request BLOCKS for a minute or two while the sandbox is created.
 curl -s -m 900 -X POST localhost:8080/v1/runs -H "$H" -H 'content-type: application/json' \
   -d '{"prompt":"Run ls -la in the workspace and tell me what you see"}' | python3 -m json.tool
 #    expect "status": "awaiting_approval"  -> nothing has executed yet
@@ -110,10 +110,11 @@ paused agent come back from the database.
 ## 6. Run the tests (optional)
 ```bash
 uv run pytest                      # no database needed; the Postgres tests are skipped
-export PINBOARD_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pinboard
+docker run -d --name pbtest-pg -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=pbtest -p 127.0.0.1:55432:5432 postgres:16
+export PINBOARD_TEST_DATABASE_URL=postgresql://postgres:pw@127.0.0.1:55432/pbtest
 uv run pytest                      # also runs the Postgres tests
 ```
-The Postgres tests drop and recreate the `pb_*` tables: point the URL at a throwaway database, not one you care about.
+The Postgres tests drop and recreate the `pb_*` tables: point the URL at a throwaway database (a separate container on its own port, as above), never at one you care about, including the `pinboard-db` container of step 5B.
 
 ## 7. Clean up
 ```bash
@@ -121,7 +122,7 @@ uv run pinboard runtimes                       # list Agent Platform runtimes cr
 uv run pinboard runtimes --delete <full name>  # delete one by exact name (asks you to type 'delete')
 docker rm -f pinboard-db                       # remove the local Postgres
 ```
-Sandboxes delete themselves when a run finishes, and expire on their own after `SANDBOX_TTL_SECONDS` (default 1 hour).
+A one-off run's sandbox is deleted when the run finishes; a conversation's sandbox when it has been idle for `limits.sandbox_idle_minutes`; and every sandbox expires on its own after `SANDBOX_TTL_SECONDS` (default 1 hour).
 
 ## Troubleshooting
 
@@ -138,10 +139,10 @@ Sandboxes delete themselves when a run finishes, and expire on their own after `
 | New runtimes keep appearing | `SANDBOX_RUNTIME` is empty in `.env`: copy the name the first run printed |
 
 ## What has and hasn't been tested
-Tested: guards, vault, skills, the sandbox class, the whole agent loop (scripted model), both state stores on real Postgres,
-park/approve/reject/edit/expire including a simulated restart, the HTTP API, and a real `pinboard serve` process.
-**Not tested on real GCP:** resuming a parked run into its existing sandbox, a real Gemini-driven approval round trip, Cloud SQL,
-the Docker image, and the Agent Runtime contract routes. Reports from your first real run are the most valuable feedback.
+Tested with scripted models and fakes (`uv run pytest`): guards, vault, skills, the sandbox class, the whole agent loop, both state stores on real Postgres, park/approve/reject/edit/expire including a simulated restart, the HTTP API, and a real `pinboard serve` process.
+Tested against the real services: `scripts/verify_real.py` runs the agent with real Gemini and the real sandbox service (streaming, approvals, restart while waiting, cancel, artifacts, e-mail, GitHub, parallel helpers, MCP); `scripts/smoke_runtime.py` tests a **deployed** engine;
+the Docker image, Cloud SQL, the Agent Runtime contract routes and the Cloud Run web backend are all deployed and smoke-tested (see [../README.md](../README.md), "How close to production it is", for what is not).
+This page covers only the local CLI and API.
 
 ## 8. Conversations (sessions and turns)
 
@@ -173,4 +174,4 @@ curl -s "localhost:8080/v1/artifacts?session_id=$S" -H "$H"             # files 
 curl -s localhost:8080/v1/artifacts/<id>/content -H "$H" -o report.md    # download one
 ```
 A conversation's sandbox is created only when a tool first needs it, so a chat-only reply is immediate; the first command or file operation
-waits for it to start (a few minutes the very first time).
+waits for it to start (30 to 130 seconds; the warm pool in the web app hides most of that).

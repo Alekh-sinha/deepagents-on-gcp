@@ -6,3 +6,9 @@ from pathlib import Path
 for folder in sorted(Path(__file__).parent.iterdir()):
     if folder.is_dir() and not folder.name.startswith(("_", ".")):
         sys.path.insert(0, str(folder))
+
+# The shipped policy holds placeholders; a developer's own values live in config/policy.local.yaml. Tests must see the shipped file only
+# (tests of the merge itself pass `local=` explicitly).
+import os  # noqa: E402
+
+os.environ["PINBOARD_POLICY_LOCAL"] = "off"

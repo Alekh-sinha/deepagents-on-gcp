@@ -15,3 +15,28 @@ dist/
 *.egg-info/
 scripts/qualify_models_results.json
 .local-ui/
+
+# this machine's own deployment (project id, bucket, the runtime it created): never in the repo
+deploy/.state*.json
+deploy/config.local.yaml
+spikes/.state.json
+spikes/**/.state.json
+spikes/**/.secret
+
+# results of runs against the real services, and Windows download markers
+scripts/*_results.json
+*:Zone.Identifier
+
+# Terraform working files (state can hold secrets)
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/.schema.json
+terraform/terraform.tfvars
+
+# local notebooks and the local-UI session folder
+docs/notebooks/experiment.ipynb
+docs/notebooks/gateway-experiments.ipynb
+
+# your own policy values (see config/policy.local.example.yaml)
+config/policy.local.yaml

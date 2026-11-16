@@ -59,6 +59,8 @@ def normalise(value: Any, *, default_cap: int, hard_cap: int) -> dict | None:
     else:
         raise BadRequest("auto_approve needs \"all\": true or a \"kinds\" list (send false to switch it off)")
     cap = value.get("max_per_turn", default_cap)
+    if isinstance(cap, float) and cap.is_integer():
+        cap = int(cap)   # Agent Runtime delivers every JSON number as a float (5 arrives as 5.0): found on the deployed engine
     if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
         raise BadRequest("auto_approve.max_per_turn must be a whole number of at least 1")
     return {"kinds": chosen, "max_per_turn": min(cap, hard_cap)}

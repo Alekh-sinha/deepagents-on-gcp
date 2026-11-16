@@ -55,7 +55,7 @@ class Env:
         self.http = http or new_http()
         repo_routes(self.http)
         self.clock = Clock()
-        self.app = GitHubApp("5197239", PRIV, installation, http=self.http, clock=self.clock)
+        self.app = GitHubApp("123456", PRIV, installation, http=self.http, clock=self.clock)
         self.events, self.files, self.ledger = [], files or {}, InMemoryLedger()
         self.tools, self.checks = make_github_tools(self.app, policy or pol(), read_file=lambda p: self.files[p], ledger=self.ledger,
                                                     audit=lambda e, d: self.events.append((e, d)))
@@ -75,7 +75,7 @@ def test_jwt_is_rs256_signed_for_the_app_id_and_short_lived():
     env.app.token(REPO)
     bearer = env.http.calls[0]["auth"].split(" ", 1)[1]
     claims = jwt.decode(bearer, PUB, algorithms=["RS256"], options={"verify_exp": False, "verify_iat": False})
-    assert claims["iss"] == "5197239" and claims["iat"] == int(env.clock.t) - 60 and claims["exp"] - claims["iat"] <= 10 * 60 + 60
+    assert claims["iss"] == "123456" and claims["iat"] == int(env.clock.t) - 60 and claims["exp"] - claims["iat"] <= 10 * 60 + 60
 
 
 def test_installation_is_autodetected_only_when_unambiguous():

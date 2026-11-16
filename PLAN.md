@@ -1,9 +1,14 @@
 # PLAN: Pinboard Phase 2 (connectors, sessions, Agent Runtime, frontend)
 
-> **2026-10-09:** module files named below (`service.py`, `api.py`, `state.py`, `policy.py`, ...) were moved into packages `core/`, `state/`, `engine/`, `web/`; see the layout in CLAUDE.md. The design itself is unchanged.
+> **This is the ORIGINAL plan, kept for context. It is not a description of the current system.** Written on 2026-10-07 and since carried out: the current design is in [README.md](README.md).
+> Where reality differs from this plan: (1) the React app is **not** hosted on Cloud Run; it runs on your computer against the web backend, which is on Cloud Run behind IAP. (2) Agent Gateway egress (M9) did not work with a Postgres checkpointer, and the
+> "state service on Cloud Run" idea (M9b below) was **never built**: egress is controlled with a PSC interface, a proxy with a host allowlist and a private database address instead ([docs/EGRESS.md](docs/EGRESS.md)). (3) Things built that this plan does not mention:
+> bring-your-own MCP servers, scheduled tasks, "approve automatically", the warm sandbox pool, helper-model choice, running another agent through `AGENT_BUILDER`, and a local policy file for personal values.
+
+> **2026-10-09:** module files named below (`service.py`, `api.py`, `state.py`, `policy.py`, ...) were moved into packages `core/`, `state/`, `engine/`, `web/`; see the layout in README.md. The design itself is unchanged.
 
 
-Status: **plan only, no product code written yet.** Written 2026-10-07 after the GCP spike (findings in CLAUDE.md "Verified facts").
+Status when written: **plan only, no product code written yet** (as of November 2026 M0 to M8, the deploy tooling and Terraform are built, tested and deployed). Written 2026-10-07 after the GCP spike (findings in spikes/README.md).
 Milestones M0-M5 are local (docker Postgres + fakes, real GCP only for the sandbox in M5). M6 is the first real deployment.
 
 ## 1. Target architecture
@@ -65,7 +70,7 @@ sandbox may be fresh and where deliverables live. Parked approvals no longer kee
 **D4. Policy file** `config/policy.yaml` (loaded by `policy.py`, path via `PINBOARD_POLICY`; shipped in the image and overridable from GCS later). Enforced **inside tools before an approval
 is requested**, so a disallowed action is refused immediately and the human never sees it:
 ```yaml
-email:  {from_inbox: privai-agent-0909@agentmail.to, allowed_recipients: [alekh.sinha09@gmail.com], max_per_day: 20, max_attachment_mb: 5}
+email:  {from_inbox: your-inbox@agentmail.to, allowed_recipients: [you@example.com], max_per_day: 20, max_attachment_mb: 5}
 github: {allowed_repos: [], branch_prefix: "agent/", never_default_branch: true}   # [] = every repo the installation can see
 models: {default: gemini-2.5-flash, allowed: [{id: gemini-2.5-flash, provider: google_genai, label: "Gemini 2.5 Flash"}]}
 limits: {max_turn_minutes: 30, max_concurrent_turns: 4, max_auto_resumes: 1, sandbox_idle_minutes: 20}
@@ -116,7 +121,7 @@ Aliases `query`/`stream_query` are optional (SDK/Playground only). Local `/v1/*`
 - `pb_email_log`(day, count) or derive from audit for `max_per_day`
 
 ## 5. Code changes by module
-*(Paths in this table pre-date the 2026-10-07 restructure into `agent/`, `gcp/`, `integrations/`; the current layout is in CLAUDE.md. New M4 modules: `events.py`, `worker.py`, `gcp/sessions.py`; M5: `gcp/artifacts.py`.)*
+*(Paths in this table pre-date the 2026-10-07 restructure into `agent/`, `gcp/`, `integrations/`; the current layout is in README.md. New M4 modules: `events.py`, `worker.py`, `gcp/sessions.py`; M5: `gcp/artifacts.py`.)*
 | Module | Change |
 |---|---|
 | `api.py` | raw-body parse (D8); new contract methods; keep `/v1` mirror |
@@ -144,7 +149,7 @@ Aliases `query`/`stream_query` are optional (SDK/Playground only). Local `/v1/*`
 | M5 ✅ | Lazy sandbox, CompositeBackend skills, artifacts (user-scoped, blob store + index, list/restore tools) — DONE; verified only with fakes | real run: create session, chat-only turn is instant, file-making turn works, wait/force expiry, new sandbox restores `out/` | GCP sandbox + GCS |
 | M6 | Container + `deploy.sh` stage 1 + Cloud Scheduler `expire`; deploy to Agent Runtime; `scripts/smoke_runtime.py` calls every method through `:query`/`:streamQuery` | smoke script green on the real engine; one real "write a report and email it" with approval | yes |
 | M7 | `terraform/` mirroring `deploy.sh` (APIs, AR, SA/IAM, Cloud SQL, secrets (values out of state), engine with `secret_env`, scheduler, bucket) | `terraform plan` clean against a fresh project or an import of the live one | yes |
-| M8 | (+ warm spare sandbox: pool table, `warm_sandbox` method, typing trigger; see CLAUDE.md) Cloud Run BFF + React UI behind IAP: chat, plan board, approval cards per kind, artifacts, model picker | manual walkthrough; IAP denies a non-allowlisted account | yes |
+| M8 | (+ warm spare sandbox: pool table, `warm_sandbox` method, typing trigger; see README.md, "The sandbox") Cloud Run BFF + React UI behind IAP: chat, plan board, approval cards per kind, artifacts, model picker | manual walkthrough; IAP denies a non-allowlisted account | yes |
 | M9 | Hardening: Registry check, Agent Gateway egress allowlist (Vertex, Secret Manager, sqladmin + 3307, GitHub, AgentMail, Tavily, GCS), cost caps/alerts, runbooks. Optional: Memory Bank tools, inbound email trigger | deploy behind gateway; all smoke tests still pass; a blocked host is blocked | yes |
 `deploy.sh` is written incrementally from M6 so Terraform (M7) has a tested reference.
 
@@ -166,7 +171,7 @@ double-encoded body tests, worker/tail/reaper tests with a fake clock, connector
 
 ## 9. Needed from you
 1. **Approve D1** (background worker + tail) vs. the simpler "one streamed request per turn". D1 costs more code in M4 but is the only design immune to the timeouts and dropped connections.
-2. **GCP project:** keep `automation-ai-507911` (gcloud account `sanataniarushi1@gmail.com`) or use a dedicated project? Region stays `us-central1` unless you say otherwise.
+2. **GCP project:** keep your existing project (`YOUR_PROJECT_ID`, gcloud account `you@example.com`) or use a dedicated project? Region stays `us-central1` unless you say otherwise.
 3. Put `AGENTMAIL_API_KEY` in `pinboard-agent/.env` (never in chat), and tell me the GitHub App id and installation id (non-secret) when M2 starts.
 4. Confirm the bucket/naming prefix (default `pinboard-<project>`).
 
@@ -183,7 +188,7 @@ double-encoded body tests, worker/tail/reaper tests with a fake clock, connector
 4. `service.py`: `create_session, list_sessions, get_session (rebuilt from events, no agent needed), send_message, tail_turn (generator), decide (resumes in background), cancel_turn, resume_turn, get_turn, list_models, list_artifacts, expire (reaper + approval expiry + auto-resume)`.
 5. `api.py`: new contract methods (12 unary + `stream_turn`) and `/v1` mirrors; `parse_contract` already fixed.
 6. **Sandbox is per SESSION in M4 (decided with the user; conversation continuity is the checkpoint, FILE continuity is the sandbox).** A `RuntimeProvider.acquire(session)` attaches to `pb_sessions.sandbox_name` while `sandbox_expires_at` is in the future (readiness-checked), otherwise creates a new one (eagerly, on the first turn that needs it), syncs skills only on creation, and records name + expiry (created + `SANDBOX_TTL_SECONDS`). A finished or parked turn DETACHES (never deletes). If the old sandbox is gone, the next turn gets a one-line note that its files are gone. `expire()` deletes sandboxes of sessions idle longer than `limits.sandbox_idle_minutes` (new, default 20) and expired ones. One active turn per session keeps the sandbox single-user. The legacy synchronous `/v1/runs` keeps its own throwaway sandbox that is deleted at the end.
-   M5 then adds (artifacts are USER-scoped in a bucket, see CLAUDE.md): `gcp/artifacts.py` + `pb_artifacts` + agent tools `list_artifacts` / `restore_artifact`; lazy/background-warm creation (chat-only turns never wait), `CompositeBackend` for skills, and GCS backup/restore of `/workspace/out` across a sandbox replacement.
+   M5 then adds (artifacts are USER-scoped in a bucket, see README.md, "The sandbox"): `gcp/artifacts.py` + `pb_artifacts` + agent tools `list_artifacts` / `restore_artifact`; lazy/background-warm creation (chat-only turns never wait), `CompositeBackend` for skills, and GCS backup/restore of `/workspace/out` across a sandbox replacement.
 7. Subagents share the parent's thread and checkpointer (their pending approvals persist and resume; verified by tests). Their intermediate steps are NOT in the parent's messages, so the worker records them from the stream (`subgraphs=True`, namespace `tools:<id>`) as events. The checkpointer can also be read directly (no agent needed) as a fallback transcript.
 8. New tests in M4: resume a subagent's pending approval after a simulated restart on real Postgres; sandbox reuse across turns; replaced-sandbox note; idle sandbox deletion.
 
@@ -191,8 +196,8 @@ double-encoded body tests, worker/tail/reaper tests with a fake clock, connector
 
 **Source of truth for the transcript** is `pb_events` (what the UI shows); the LangGraph checkpoint is only for the agent. Reads therefore never build an agent or a sandbox.
 
-## M9b — State service on Cloud Run (so the runtime can sit behind the EGRESS gateway)  [planned 2026-10-09, not started]
-Why: every documented configuration (public IP, private IP + gateway networkConfig, with `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=false`) fails at the Cloud SQL socket handshake behind the egress gateway (see CLAUDE.md). The gateway stays (central egress rules); only the Postgres hop changes to HTTPS.
+## M9b — State service on Cloud Run (so the runtime can sit behind the EGRESS gateway)  [planned 2026-10-09; NEVER BUILT, superseded by docs/EGRESS.md; kept as the design that was considered]
+Why: every documented configuration (public IP, private IP + gateway networkConfig, with `GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=false`) fails at the Cloud SQL socket handshake behind the egress gateway (see README.md, "Problems we ran into"). The gateway stays (central egress rules); only the Postgres hop changes to HTTPS.
 Design: runtime (AGENT_IDENTITY, egress gateway, env var) --HTTPS, ID token--> Cloud Run `pinboard-state` (IAM required) --Cloud SQL built-in connector--> `pinboard-pg`. The container no longer needs the Cloud SQL proxy.
 Auth: runtime gets an OIDC ID token for an invoker service account (`pinboard-state-invoker`) via IAM Credentials (`generateIdToken`); the agent identity needs `roles/iam.serviceAccountOpenIdTokenCreator` on it (pattern from Google's egress codelab); Cloud Run grants `roles/run.invoker` to that SA only. Gateway side: register the service's `*.run.app` host in Agent Registry + `roles/iap.egressor` for the agent principalSet.
 Steps (each ends with a check; stop and report if a check fails):
