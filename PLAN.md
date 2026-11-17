@@ -23,7 +23,7 @@ Milestones M0-M5 are local (docker Postgres + fakes, real GCP only for the sandb
         ▼                                                         ▼ web_search, send_email, github_*, submit_plan, ask_user
    Cloud SQL Postgres (sessions, turns, events, approvals, audit, LangGraph checkpoints)
         │
-        ├─ Agent Platform shell sandbox (per session, lazy, 1 h TTL, no secrets, no internet)
+        ├─ Agent Platform shell sandbox (per session, lazy, 1 h TTL, no secrets)
         ├─ GCS: skills (gs://…/skills) and session artifacts (gs://…/sessions/<id>/out)
         ├─ Secret Manager (AGENTMAIL_API_KEY, GITHUB_APP_PRIVATE_KEY, TAVILY_API_KEY, DB password, …)
         └─ Vertex AI (Gemini; model chosen per session/message from an allowlist)

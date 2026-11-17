@@ -3,9 +3,7 @@
 IMPORTANT: these are defence in depth, not the security boundary. Heuristic prompt
 filters can always be evaded. The real protections are (1) human approval for
 consequential actions, (2) policy checks inside every tool and least-privilege
-connectors and IAM, and (3) the remote sandbox, which holds no secrets and, per
-Google's documentation, has outbound internet off unless its template turns it on
-(we never do; documented, not tested by us: see docs/EGRESS.md). These guards make
+connectors and IAM, and (3) the remote sandbox, which holds no secrets. These guards make
 the easy attacks fail loudly and keep the audit trail clean.
 """
 from __future__ import annotations

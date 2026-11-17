@@ -1,7 +1,7 @@
 # Egress control without Agent Gateway (optional, off by default)
 
 **Goal:** the engine (the process inside Agent Runtime that runs the agent and holds the Postgres connection) can reach only the third-party hosts you list. It keeps the Postgres checkpointer,
-which Agent Gateway's egress mode could not carry (see the README). Nothing here is switched on unless `deploy/config*.yaml` says so; with the three settings empty the deployment is exactly what it was.
+which Agent Gateway's egress mode could not carry (see the README). It is config-driven: nothing here is switched on unless `deploy/config*.yaml` says so, and with the settings empty the deployment is exactly what it was. A fresh clone therefore gets no enforcement until `deploy/network.sh up` has built the pieces and the settings are in place. It was verified on this project's own deployment (see below).
 
 ## How it works
 
@@ -74,17 +74,11 @@ That check found one problem, now fixed: Tavily's async client ignores proxy set
   VPC Service Controls would close that; it is not set up or tested here.
 * **Allowed hosts can still receive data.** The proxy filters by host name only (no TLS inspection), so anything sent to `api.tavily.com` (a search query) or `api.github.com` is allowed. The GitHub tools are further limited by policy
   (`agent/*` branches and pull requests only, repos of the App installation only, every write approved by a person).
-* **Inbound calls are not covered.** A PSC interface only changes the engine's *outbound* traffic. Callers (the web backend and Cloud Scheduler) still reach the engine through the Vertex API, controlled by IAM.
+* **Inbound calls are not covered.** (The web backend's Cloud Run service has ingress `all` with IAP in front: IAP is an identity check, not a network restriction, so "ingress only through Cloud Run" would be the wrong description.) A PSC interface only changes the engine's *outbound* traffic. Callers (the web backend and Cloud Scheduler) still reach the engine through the Vertex API, controlled by IAM.
   An Agent Gateway ingress could govern that, but a runtime cannot have a gateway and a PSC interface together (the API refuses it). The beta Terraform provider also lists `dedicated_ingress_endpoint_enabled`; we have not looked into it.
-* **The shell sandbox is a separate Google service**, not part of this VPC, so the proxy and the attachment above do not apply to it. What Google's documentation says about it (read in November 2026, **not tested by us**; see the
-  [Sandboxes overview](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/sandbox) and the [shell sandbox quickstart](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/sandbox/shell-sandbox-quickstart)):
-  template-backed sandboxes, shell sandboxes included, have outbound internet **off by default** (`internet_access` is `False` in the template's `egress_control_config`); code runs in a Google-managed project in a gVisor container,
-  without Application Default Credentials and without access to the metadata server; with direct egress switched on, private ranges (`10/8`, `172.16/12`, `192.168/16`) and link-local addresses are still blocked.
-  There is **no built-in domain allowlist** for sandboxes: restricting domains means attaching the sandbox to your VPC (`egress_control_config.network_attachment`) and using Cloud NGFW rules or Secure Web Proxy, which is the same pattern as above.
-  Our code never sets any sandbox egress option (it creates the sandbox runtime with defaults), so the documented default applies. If you ever turn sandbox internet on, add it to the threat model: the sandbox is where model-written code runs.
 * **Found while verifying this:** `httpx` (used by the MCP client) does not understand address ranges in `NO_PROXY`, and a host name can never match a range, so every server in the VPC was first sent to the proxy and refused. The MCP client now decides itself (`goes_direct`).
 * **Verified on the live engine since the first version of this page:** the Go Cloud SQL proxy with `--private-ip` inside the real runtime (the engine starts, opens its state and passes the full smoke test on the private address), and the move of the existing
-  production database to a private address. The database kept its public address as well (adding a private one took about 16 minutes and restarted the instance once); removing the public address is a separate step you may want to take.
+  production database to a private address. The database kept its public address as well, with no authorized networks (only the Cloud SQL connector and Auth Proxy, authenticated with IAM, can use it; adding the private one took about 16 minutes and restarted the instance once); removing the public address is a separate step you may want to take.
 * **Still not verified:** VPC Service Controls (to restrict inbound calls and Google API destinations), probing blocked hosts from inside the live engine (the product cannot make arbitrary requests), and the price of the proxy and NAT over a month.
 * A client that ignores the proxy settings does not leak; it fails to connect (there is no other route). A new third-party library should be added to `tests/agent/test_egress_proxy.py`.
 

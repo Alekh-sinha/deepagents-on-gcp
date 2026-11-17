@@ -78,8 +78,7 @@ Documentation we used:
 * [The Agent Runtime contract](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/runtime-contract) ·
   [Deploy with Terraform](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/use-terraform) ·
   [Memory Bank](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/memory-bank) ·
-  [Using a Private Service Connect interface with Agent Runtime](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/private-service-connect-interface) ·
-  [Sandboxes overview](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/sandbox)
+  [Using a Private Service Connect interface with Agent Runtime](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/runtime/private-service-connect-interface)
 
 ### Everything else that bit us
 
@@ -210,15 +209,14 @@ The goal: the engine can reach **only the third-party hosts you list**, while ke
 | Tavily, GitHub, AgentMail | An **explicit proxy** (Secure Web Proxy) with a host allowlist, then **Cloud NAT** | The allowlist (exact host names) |
 | MCP servers | A reserved subnet inside the VPC, **direct** and by name (DNS peering), or an approved public host through the proxy | The policy (`mcp.scope`), re-checked on every call, and the network |
 | Anything else | No route | The engine's own subnet has no NAT, so it cannot skip the proxy |
-| Calls **into** the engine | The Vertex AI API with IAM; the PSC interface does not change this | IAM only |
-| The shell sandbox | A Google service outside your VPC; per Google's documentation its outbound internet is **off by default** (not tested by us) | Google's default |
+| Calls **into** the engine | The Vertex AI API with IAM; the PSC interface does not change this. The web backend's Cloud Run service has ingress set to `all`, with IAP in front (an identity check at the edge, not a network restriction) | IAM, and IAP for people |
 
 * **Why a proxy and not just a firewall:** the proxy filters by host name, so the allowlist reads as a list of services, not IP ranges. Cloud NAT is attached to the **proxy's** subnet only, which is what makes the proxy unavoidable.
 * **Every HTTP client has to cooperate:** a proxy is explicit (clients must be told to use it). The proxy settings reach every client through environment variables, and a test runs each real client against a fake proxy to prove it. That test found that Tavily's async client ignores proxies and that `httpx` cannot match address ranges in `NO_PROXY`.
 * **The same list drives the app and the network:** `mcp.allowed_hosts` in the policy is also the proxy's allowlist, so a host the app accepts is a host the network lets through. A user cannot connect a new third party from the UI alone.
 * **Verified.** On a throwaway agent with this exact network layout: allowed hosts answered in about 0.1 s through the proxy, the same hosts timed out when tried directly, and hosts not on the list were refused by the proxy. On the live engine: it runs on the private database, a real web search went through the proxy, and a real Gemini turn called tools on an MCP server inside the VPC by name (non-listed and non-VPC servers were refused when added). We did not probe for blocked hosts from inside the live engine, because the product has no way to make arbitrary requests.
 * **What it does not do:** data can still leave to an allowed host or through a Google API your IAM allows; inbound calls are IAM only (VPC Service Controls would help and is not set up). Full detail, the commands and the limits: **[docs/EGRESS.md](docs/EGRESS.md)**.
-* It is **off by default** and switched on by three lines of config (`network_attachment`, `egress_proxy`, `sql_private_ip`); `deploy/network.sh up` builds the pieces, Terraform has the same settings.
+* It is **config-driven and off by default** (`network_attachment`, `egress_proxy`, `sql_private_ip`, and `network_dns_domains` for names): a fresh clone gets no enforcement until `deploy/network.sh up` has built the pieces and those lines are set. Terraform has the same settings. It was verified on this project's own deployment, as described above.
 
 ### Identity, secrets and least privilege
 
@@ -275,7 +273,7 @@ What bounds the damage a confused or manipulated agent can do, strongest first. 
 | **Policy inside every tool**, checked before an approval is even asked and again on edited arguments | e-mail to anyone but the allow-listed addresses, pushes to other repos, to non-`agent/` branches or the default branch, models and limits outside the list | anything the tool is allowed to do |
 | **Approve automatically has hard limits**: only shell and GitHub by default (e-mail, plans, connected tools and unknown tools only if you list them), never questions, a per-turn cap (`max_auto_approvals_per_turn`, 25), and `approvals.never_auto_tools` always asks | one click turning into unlimited side effects | what the allowed kinds can do within the cap |
 | **Least-privilege identities**: a dedicated service account, a GitHub App token narrowed to one repo and to contents + pull requests, secrets read by name | a stolen token reaching other repos or data | Google APIs the service account may call |
-| **Remote sandbox** (disposable, holds no secrets, files return only as artifacts). Google documents its outbound internet as **off by default**, with no route to private ranges or the metadata server, and our code never turns it on | host compromise, secret theft from the shell | abuse inside the sandbox. The default is Google's documented behaviour; **we have not tested it** |
+| **Remote sandbox** (disposable, holds no secrets, files return only as artifacts) | host compromise, secret theft from the shell | abuse inside the sandbox |
 | **Network egress control** (optional, off by default; [`docs/EGRESS.md`](docs/EGRESS.md)): the engine joins your VPC and reaches third parties only through a proxy with a host allowlist | the engine calling a host you did not list | Google APIs (limited by IAM only), data sent to an allowed host, inbound calls |
 | **Helpers are bounded and cannot publish**: only the orchestrator holds the GitHub write tools, e-mail lives in the mailer, each gated; helpers stop after `max_helper_model_calls` | a looping or manipulated helper acting alone | |
 | **IAP + verified e-mail + CSRF header + CSP** (web backend) | anonymous callers, forged user ids, cross-site requests, remote images used to leak data | a compromised Google account |
@@ -343,14 +341,14 @@ What bills while it is deployed:
 | Infrastructure as code | `terraform/` (validated; see below) |
 | Acceptance tests against the live system | `smoke --all`: models, housekeeping, a chat turn through the worker, durable state, a web search, a shell approval with a cloud sandbox (6/6) |
 | Identity-based access, least privilege, secrets in Secret Manager | IAP, one service account per role, secrets by name |
-| Egress control and a private database | PSC interface + proxy allowlist + private IP (see above) |
+| Egress control and a private database address | PSC interface + proxy allowlist + private IP (see above). The database **also keeps its public address**: it has no authorized networks, so only the Cloud SQL connector and Auth Proxy, authenticated with IAM, can reach it. Removing the public address is a separate step |
 | Human approval and an audit trail for every side effect, with policy checks inside the tools | Gates, `config/policy.yaml`, an audit table |
 | Cost controls | Lazy and capped sandboxes, scale-to-zero web tier, idle sweeps, `max_concurrent_turns`, per-turn caps on helper model calls and automatic approvals |
 | A large automated test suite, and a test that pins the default behaviour | Over 1,200 backend tests (a real Postgres variant included) and 149 frontend tests; `tests/engine/test_default_path_golden.py`; important tests are checked by breaking the code and watching them fail |
 
 **Not in place, or not verified:**
 
-* **Inbound is IAM only.** Callers reach the engine through the Vertex AI API; nothing restricts them to your network. VPC Service Controls would, and we have not set it up. A gateway ingress is incompatible with the PSC interface.
+* **Inbound is not network-restricted.** The engine is reached through the Vertex AI API and gated by IAM, not by a network control. The only place people sign in is the Cloud Run web backend, but its ingress setting is `all` with IAP in front, so IAP (identity) is the control there too. Do not read this as "ingress only through Cloud Run". VPC Service Controls would restrict it, and we have not set it up. A gateway ingress is incompatible with the PSC interface.
 * **Google APIs are open to whatever IAM allows**, and data can leave to a host on the allowlist. The network control reduces the attack surface; it is not a data-loss guarantee.
 * **No monitoring, alerting or dashboards.** There are logs (Cloud Logging) and audit rows, but no alert policies, uptime checks or SLOs.
 * **No CI/CD pipeline.** Builds and deploys are run by hand with the scripts.
@@ -358,7 +356,6 @@ What bills while it is deployed:
 * **No load or soak test**, and the agent's behaviour under many concurrent users has not been measured.
 * **The Terraform is validated, not applied** to a project here; `deploy.sh` is what actually ran.
 * **No measured evaluation of the guards.** The prompt and command guards are heuristics, described as defence in depth; there is no red-team suite with block rates yet.
-* **The sandbox's "internet off" is Google's documented default,** not something we tested.
 * **The web app is not hosted:** the React app runs on your computer against the cloud engine, and the Cloud Run web image is older than this code (rebuild with `deploy.sh web-build` then `deploy.sh web`).
 * **A custom agent** written to the contract runs through the real engine in tests, but has not been deployed to Agent Runtime.
 
